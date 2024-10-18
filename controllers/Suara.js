@@ -165,17 +165,6 @@ exports.getSuaraBySpecificPaslon = async (req, res) => {
       });
     }
 
-    const totalPeserta = await TPS.aggregate([
-      {
-        $group: {
-          _id: null,
-          total: { $sum: "$jumlahPeserta" },
-        },
-      },
-    ]);
-
-    const totalAngka = totalPeserta.length > 0 ? totalPeserta[0].total : 0;
-
     const result = await Suara.aggregate([
       { $unwind: "$suaraPaslon" },
       {
@@ -225,7 +214,6 @@ exports.getSuaraBySpecificPaslon = async (req, res) => {
     const formattedResult = {
       _id: result[0]._id,
       "Total Suara": result[0]["Total Suara"],
-      "Total Peserta": totalAngka,
       "Nama Calon Ketua": result[0]["Nama Calon Ketua"],
       "Nama Calon Wakil Ketua": result[0]["Nama Calon Wakil Ketua"],
       Panggilan: result[0]["Panggilan"],

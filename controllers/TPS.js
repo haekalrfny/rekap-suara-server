@@ -137,97 +137,101 @@ exports.getReportByDaerah = async (req, res) => {
   const { kecamatan, desa, kodeTPS, paslonId } = req.query;
 
   try {
-    let report = {};
-
-    // Menghitung total suara untuk paslon tertentu berdasarkan ID paslon
-    const getTotalSuaraPaslon = async (filter) => {
-      const suaraData = await Suara.find(filter).populate("suaraPaslon.paslon");
-      let totalSuara = 0;
-
-      suaraData.forEach((suara) => {
-        suara.suaraPaslon.forEach((paslonData) => {
-          if (paslonData.paslon._id.toString() === paslonId) {
-            totalSuara += paslonData.jumlahSuaraSah;
-          }
-        });
-      });
-
-      return totalSuara;
+    const tpsQuery = {
+      ...(kecamatan && { kecamatan }),
+      ...(desa && { desa }),
+      ...(kodeTPS && { kodeTPS }),
     };
 
-    // Kondisi 1: Hanya kecamatan yang diisi
-    if (kecamatan && !desa && !kodeTPS) {
-      const tpsKecamatan = await TPS.find({ kecamatan });
-      const totalSuaraKecamatan = await getTotalSuaraPaslon({
-        tps: { $in: tpsKecamatan.map((t) => t._id) },
-      });
+    const tpsList = await TPS.find(tpsQuery).lean(); // Use .lean() for better performance
+    const tpsIds = tpsList.map((tps) => tps._id);
 
-      report = {
-        kecamatan,
-        paslonId,
-        totalSuaraKecamatan,
-        totalPesertaKecamatan:
-          tpsKecamatan.reduce((acc, curr) => acc + curr.jumlahPeserta, 0) || 0,
-      };
+    const suaraTPS = await Suara.find({
+      tps: { $in: tpsIds },
+    })
+      .populate("tps")
+      .lean();
+
+    // Menghitung total desa
+    const totalDesa = await TPS.distinct("desa", { kecamatan });
+    const desaWithSuaraSet = new Set(suaraTPS.map((suara) => suara.tps?.desa));
+    const totalDesaWithSuara = desaWithSuaraSet.size;
+
+    // Helper to calculate TPS with suara
+    const getTpsWithSuaraCount = (tpsList, suaraTPS) => {
+      return tpsList.filter((tps) =>
+        suaraTPS.some(
+          (suara) => suara.tps._id.toString() === tps._id.toString()
+        )
+      ).length;
+    };
+
+    const tpsInDesa = await TPS.countDocuments({ desa });
+
+    // Prepare the response
+    const response = {
+      totalDesa: totalDesa.length,
+      totalDesaWithSuara,
+      totalTPS: tpsInDesa,
+      totalTpsWithSuara: getTpsWithSuaraCount(tpsList, suaraTPS),
+    };
+
+    // Jika hanya ada kecamatan dan paslonId
+    if (kecamatan && paslonId && !desa && !kodeTPS) {
+      return res.status(200).json(response);
     }
 
-    // Kondisi 2: Kecamatan dan Desa diisi
-    else if (kecamatan && desa && !kodeTPS) {
-      const tpsKecamatan = await TPS.find({ kecamatan });
-      const tpsDesa = await TPS.find({ kecamatan, desa });
-      const totalSuaraKecamatan = await getTotalSuaraPaslon({
-        tps: { $in: tpsKecamatan.map((t) => t._id) },
-      });
-      const totalSuaraDesa = await getTotalSuaraPaslon({
-        tps: { $in: tpsDesa.map((t) => t._id) },
-      });
-
-      report = {
-        kecamatan,
-        desa,
-        paslonId,
-        totalSuaraKecamatan,
-        totalPesertaKecamatan:
-          tpsKecamatan.reduce((acc, curr) => acc + curr.jumlahPeserta, 0) || 0,
-        totalSuaraDesa,
-        totalPesertaDesa:
-          tpsDesa.reduce((acc, curr) => acc + curr.jumlahPeserta, 0) || 0,
-      };
+    // Jika ada kecamatan, desa dan paslonId
+    if (kecamatan && desa && paslonId && !kodeTPS) {
+      return res.status(200).json(response);
     }
 
-    // Kondisi 3: Kecamatan, Desa, dan kodeTPS diisi
-    else if (kecamatan && desa && kodeTPS) {
-      const tpsKecamatan = await TPS.find({ kecamatan });
-      const tpsDesa = await TPS.find({ kecamatan, desa });
-      const tps = await TPS.findOne({ kecamatan, desa, kodeTPS });
-      const totalSuaraKecamatan = await getTotalSuaraPaslon({
-        tps: { $in: tpsKecamatan.map((t) => t._id) },
-      });
-      const totalSuaraDesa = await getTotalSuaraPaslon({
-        tps: { $in: tpsDesa.map((t) => t._id) },
-      });
-      const totalSuaraTPS = await getTotalSuaraPaslon({ tps: tps._id });
+    // Jika semua parameter (kecamatan, desa, tps, dan paslonId) ada
+    if (kecamatan && desa && kodeTPS && paslonId) {
+      const totalSuaraSahPerPaslon = suaraTPS.reduce((total, suara) => {
+        const paslonSuara = suara.suaraPaslon.find(
+          (paslon) => paslon.paslon.toString() === paslonId
+        );
+        return total + (paslonSuara ? paslonSuara.jumlahSuaraSah : 0);
+      }, 0);
 
-      report = {
-        kecamatan,
-        desa,
-        kodeTPS,
-        paslonId,
-        totalSuaraKecamatan,
-        totalPesertaKecamatan:
-          tpsKecamatan.reduce((acc, curr) => acc + curr.jumlahPeserta, 0) || 0,
-        totalSuaraDesa,
-        totalPesertaDesa:
-          tpsDesa.reduce((acc, curr) => acc + curr.jumlahPeserta, 0) || 0,
-        totalSuaraTPS,
-        totalPesertaTPS: tps.jumlahPeserta || 0,
-      };
+      // Menghitung total suara sah untuk semua paslon di kodeTPS yang dipilih
+      const selectedTPS = tpsList.find((tps) => tps.kodeTPS === kodeTPS);
+      const totalSuaraSahPerSelectedTPS = suaraTPS
+        .filter(
+          (suara) => suara.tps._id.toString() === selectedTPS?._id.toString()
+        )
+        .reduce(
+          (total, suara) =>
+            total +
+            suara.suaraPaslon.reduce(
+              (sum, paslon) => sum + paslon.jumlahSuaraSah,
+              0
+            ),
+          0
+        );
+
+      return res.status(200).json({
+        ...response,
+        totalSuaraSahPerPaslon,
+        totalSuaraSahPerSelectedTPS,
+      });
     }
 
-    return res.status(200).json(report);
+    // Jika tidak memenuhi kriteria apapun
+    return res.status(200).json({
+      message: "No data found for the given parameters",
+      ...response,
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: "Internal Server Error" });
+    console.error(
+      "Error fetching report data by kecamatan, desa, TPS, and paslon:",
+      error
+    );
+    res.status(500).json({
+      message: "Error fetching report data",
+      error: error.message,
+    });
   }
 };
 
