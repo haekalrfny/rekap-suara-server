@@ -106,6 +106,7 @@ exports.getTPSWithPagination = async (req, res) => {
           { kecamatan: { $regex: filter, $options: "i" } },
           { desa: { $regex: filter, $options: "i" } },
           { kodeTPS: { $regex: filter, $options: "i" } },
+          { dapil: { $regex: filter, $options: "i" } },
         ],
       };
     }
@@ -134,16 +135,17 @@ exports.getTPSWithPagination = async (req, res) => {
 };
 
 exports.getReportByDaerah = async (req, res) => {
-  const { kecamatan, desa, kodeTPS, paslonId } = req.query;
+  const { kecamatan, desa, kodeTPS, paslonId, dapil } = req.query;
 
   try {
     const tpsQuery = {
       ...(kecamatan && { kecamatan }),
       ...(desa && { desa }),
       ...(kodeTPS && { kodeTPS }),
+      ...(dapil && { dapil }),
     };
 
-    const tpsList = await TPS.find(tpsQuery).lean(); // Use .lean() for better performance
+    const tpsList = await TPS.find(tpsQuery).lean();
     const tpsIds = tpsList.map((tps) => tps._id);
 
     const suaraTPS = await Suara.find({
@@ -175,6 +177,18 @@ exports.getReportByDaerah = async (req, res) => {
       totalTPS: tpsInDesa,
       totalTpsWithSuara: getTpsWithSuaraCount(tpsList, suaraTPS),
     };
+
+    // Jika dapil dipilih, tambahkan perhitungan totalKecamatan dan totalKecamatanWithSuara
+    if (dapil) {
+      const totalKecamatan = await TPS.distinct("kecamatan", { dapil });
+      const kecamatanWithSuaraSet = new Set(
+        suaraTPS.map((suara) => suara.tps?.kecamatan)
+      );
+      const totalKecamatanWithSuara = kecamatanWithSuaraSet.size;
+
+      response.totalKecamatan = totalKecamatan.length; // Tambahkan hasil total kecamatan
+      response.totalKecamatanWithSuara = totalKecamatanWithSuara; // Tambahkan hasil total kecamatan dengan suara
+    }
 
     // Jika hanya ada kecamatan dan paslonId
     if (kecamatan && paslonId && !desa && !kodeTPS) {
@@ -220,7 +234,6 @@ exports.getReportByDaerah = async (req, res) => {
 
     // Jika tidak memenuhi kriteria apapun
     return res.status(200).json({
-      message: "No data found for the given parameters",
       ...response,
     });
   } catch (error) {
@@ -237,8 +250,15 @@ exports.getReportByDaerah = async (req, res) => {
 
 exports.getReportAllDaerah = async (req, res) => {
   try {
-    const totalKecamatan = await TPS.distinct("kecamatan");
     const suaraTPS = await Suara.find().populate("tps");
+
+    const totalDapil = await TPS.distinct("dapil");
+    const dapilWithSuara = suaraTPS
+      .filter((suara) => suara.tps && suara.tps.dapil)
+      .map((suara) => suara.tps.dapil);
+    const totalDapilWithSuara = new Set(dapilWithSuara).size;
+
+    const totalKecamatan = await TPS.distinct("kecamatan");
     const kecamatanWithSuara = suaraTPS
       .filter((suara) => suara.tps && suara.tps.kecamatan)
       .map((suara) => suara.tps.kecamatan);
@@ -254,6 +274,8 @@ exports.getReportAllDaerah = async (req, res) => {
     const totalSaksiWithSuara = (await Suara.distinct("user")).length;
 
     res.status(200).json({
+      totalDapil: totalDapil.length,
+      totalDapilWithSuara,
       totalKecamatan: totalKecamatan.length,
       totalKecamatanWithSuara,
       totalDesa: totalDesa.length,

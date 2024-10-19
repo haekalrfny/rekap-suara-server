@@ -7,5 +7,6 @@ router.post("/suara", auth, Suara.createSuara);
 router.get("/suara/tps/:tpsId", auth, Suara.getSuaraByTPS);
 router.get("/suara/byPaslon", auth, Suara.getSuaraByPaslon);
 router.get("/suara/:paslonId", auth, Suara.getSuaraBySpecificPaslon);
+router.get("/suara/user/:userId", auth, Suara.getSuaraByUser);
 
 module.exports = router;

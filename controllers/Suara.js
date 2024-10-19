@@ -92,6 +92,30 @@ exports.getSuaraByTPS = async (req, res) => {
   }
 };
 
+exports.getSuaraByUser = async (req, res) => {
+  try {
+    const suara = await Suara.find({ user: req.params.userId })
+      .populate("tps")
+      .populate("suaraPaslon.paslon");
+
+    const formattedSuara = suara.map((item) => ({
+      ...item._doc,
+      createdAt: moment(item.createdAt)
+        .tz("Asia/Jakarta")
+        .format("YYYY-MM-DD HH:mm:ss"),
+    }));
+
+    res.status(200).json(formattedSuara);
+  } catch (error) {
+    console.error("Error fetching suara by TPS:", error);
+    res.status(500).json({
+      error: error.message || "Internal server error",
+      details: error,
+      to: "server",
+    });
+  }
+};
+
 // Ambil Suara berdasarkan Paslon
 exports.getSuaraByPaslon = async (req, res) => {
   try {
