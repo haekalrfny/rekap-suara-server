@@ -8,6 +8,7 @@ const TPSSchema = new mongoose.Schema({
   jumlahSuaraSah: { type: Number, required: true },
   jumlahSuaraTidakSah: { type: Number, required: true },
   jumlahTotal: { type: Number, required: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: "user", required: true },
 });
 
 module.exports = mongoose.model("tps", TPSSchema, "tps");

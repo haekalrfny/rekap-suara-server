@@ -72,7 +72,7 @@ exports.getSuaraByTPS = async (req, res) => {
   try {
     const suara = await Suara.find({ tps: req.params.tpsId })
       .populate("tps")
-      .populate("suaraPaslon.paslon"); // Populasi suaraPaslon dengan detail paslon
+      .populate("suaraPaslon.paslon");
 
     const formattedSuara = suara.map((item) => ({
       ...item._doc,

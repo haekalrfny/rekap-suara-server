@@ -112,6 +112,7 @@ exports.getTPSWithPagination = async (req, res) => {
     }
 
     const tps = await TPS.find(filterObject)
+      .populate("user", "username")
       .limit(limitNumber)
       .skip(pageNumber * limitNumber)
       .exec();
@@ -129,6 +130,36 @@ exports.getTPSWithPagination = async (req, res) => {
     console.error("Error fetching TPS with pagination:", error);
     res.status(500).json({
       message: "Error fetching TPS with pagination",
+      error: error.message,
+    });
+  }
+};
+
+exports.getTPSByUsername = async (req, res) => {
+  const { username } = req.params;
+
+  if (!username) {
+    return res.status(400).json({
+      message: "Username is required",
+    });
+  }
+
+  try {
+    const user = await User.findOne({ username });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    const tps = await TPS.findOne({ user: user._id }).populate("user", "username");
+
+    res.status(200).json(tps);
+  } catch (error) {
+    console.error("Error fetching TPS by username:", error);
+    res.status(500).json({
+      message: "Error fetching TPS by username",
       error: error.message,
     });
   }
