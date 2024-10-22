@@ -11,17 +11,19 @@ const generateToken = (user) => {
 
 // Daftar pengguna baru
 exports.registerUser = async (req, res) => {
-  const { name, username, password, role } = req.body;
+  const { username, password, role } = req.body;
 
-  // Validasi input
-  if (!name || !username || !password) {
+  if (!username || !password) {
     return res
       .status(400)
       .json({ message: "Please provide all required fields" });
   }
 
   try {
-    const user = new User({ name, username, password, role: role || "user" });
+    const user = new User({
+      ...req.body,
+      role: role || "user",
+    });
     await user.save();
     const token = generateToken(user);
     res.status(201).json({ user, token });
@@ -46,7 +48,7 @@ exports.loginUser = async (req, res) => {
 
   try {
     const user = await User.findOne({ username });
-
+    console.log(await user.comparePassword(password));
     if (!user || !(await user.comparePassword(password))) {
       return res.status(401).json({ message: "Invalid username or password" });
     }
@@ -54,7 +56,7 @@ exports.loginUser = async (req, res) => {
     const token = generateToken(user);
     res.status(200).json({ user, token });
   } catch (error) {
-    console.error("Error logging in user:", error);
+    console.log("Error logging in user:", error);
     res
       .status(500)
       .json({ message: "Error logging in user", error: error.message });
@@ -64,10 +66,11 @@ exports.loginUser = async (req, res) => {
 // Update pengguna
 exports.updateUser = async (req, res) => {
   const { userId } = req.params;
-  const { name, username, password, role } = req.body;
+  const { kodeTPS, kecamatan, desa, dapil, username, password, role } =
+    req.body;
 
   // Validasi input
-  if (!name || !username || (password && password.length < 6)) {
+  if (!username || (password && password.length < 6)) {
     return res.status(400).json({
       message:
         "Please provide all required fields, and password must be at least 6 characters long if provided.",
@@ -75,7 +78,7 @@ exports.updateUser = async (req, res) => {
   }
 
   try {
-    const updates = { name, username, role };
+    const updates = { kodeTPS, kecamatan, desa, dapil, username, role };
 
     if (password) {
       updates.password = password;

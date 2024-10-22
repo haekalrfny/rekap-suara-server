@@ -2,10 +2,12 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 
 const UserSchema = new mongoose.Schema({
-  name: {
+  kodeTPS: { type: String },
+  desa: { type: String },
+  kecamatan: {
     type: String,
-    required: true,
   },
+  dapil: { type: String },
   username: {
     type: String,
     required: true,
