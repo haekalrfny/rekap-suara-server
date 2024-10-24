@@ -1,65 +1,57 @@
 const mongoose = require("mongoose");
 const Suara = require("../schema/Suara.js");
-const TPS = require("../schema/TPS.js");
 const cloudinary = require("../config/cloudinary.js");
 const upload = require("../middleware/multer.js");
-const fs = require("fs");
+const fs = require("fs").promises;
+const { uploader } = require("cloudinary").v2;
 const moment = require("moment-timezone");
 
 // Tambah Suara
 exports.createSuara = async (req, res) => {
   try {
-    upload.single("image")(req, res, async (err) => {
-      if (err) return res.status(500).json({ message: err, to: "multer" });
-      if (!req.file)
-        return res.status(400).json({ message: "No file uploaded" });
-
-      const { tps, suaraPaslon } = req.body;
-      const parsedSuaraPaslon = suaraPaslon.map((suara) => JSON.parse(suara));
-      if (!tps || !suaraPaslon || suaraPaslon.length === 0) {
-        return res
-          .status(400)
-          .json({ message: "Please provide tps & suaraPaslon" });
-      }
-
-      const publicId = `${tps}`;
-      cloudinary.uploader.upload(
-        req.file.path,
-        {
-          folder: "rekap_suara",
-          public_id: publicId,
-        },
-        async (error, result) => {
-          if (error)
-            return res.status(500).json({ message: error, to: "cloudinary" });
-
-          const suara = new Suara({
-            tps,
-            suaraPaslon: parsedSuaraPaslon,
-            image: result.secure_url,
-            user: req.user.id,
-          });
-
-          try {
-            await suara.save();
-            fs.unlink(req.file.path, (unlinkError) => {
-              if (unlinkError) {
-                console.error("Failed to delete local file:", unlinkError);
-              }
-            });
-            res.status(201).json({ msg: "berhasil", data: suara });
-          } catch (saveError) {
-            console.error("Error saving suara:", saveError);
-            res.status(500).json({
-              message: "Error saving suara",
-              error: saveError.message,
-            });
-          }
-        }
-      );
+    await new Promise((resolve, reject) => {
+      upload.single("image")(req, res, (err) => {
+        if (err) reject({ status: 500, message: err, to: "multer" });
+        if (!req.file) reject({ status: 400, message: "No file uploaded" });
+        resolve();
+      });
     });
+
+    const { tps, suaraPaslon } = req.body;
+    if (!tps || !suaraPaslon || suaraPaslon.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Please provide tps & suaraPaslon" });
+    }
+
+    const parsedSuaraPaslon = suaraPaslon.map((suara) =>
+      typeof suara === "string" ? JSON.parse(suara) : suara
+    );
+
+    const publicId = `${tps}`;
+    const result = await uploader.upload(req.file.path, {
+      folder: "rekap_suara",
+      public_id: publicId,
+    });
+
+    const suara = new Suara({
+      tps,
+      suaraPaslon: parsedSuaraPaslon,
+      image: result.secure_url,
+      user: req.user.id,
+    });
+
+    await suara.save();
+    await fs.unlink(req.file.path);
+
+    res.status(201).json({ msg: "berhasil", data: suara });
   } catch (error) {
     console.error("Server error:", error);
+    if (error.status) {
+      return res
+        .status(error.status)
+        .json({ message: error.message, to: error.to });
+    }
     res
       .status(500)
       .json({ msg: error.message || "Internal server error", to: "server" });

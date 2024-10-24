@@ -1,6 +1,8 @@
 const TPS = require("../schema/TPS.js");
 const Suara = require("../schema/Suara.js");
+const Paslon = require("../schema/Paslon.js");
 const User = require("../schema/User.js");
+const excel = require("exceljs");
 
 // Tambah TPS
 exports.createTPS = async (req, res) => {
@@ -153,7 +155,10 @@ exports.getTPSByUsername = async (req, res) => {
       });
     }
 
-    const tps = await TPS.findOne({ user: user._id }).populate("user", "username");
+    const tps = await TPS.findOne({ user: user._id }).populate(
+      "user",
+      "username"
+    );
 
     res.status(200).json(tps);
   } catch (error) {
@@ -295,13 +300,23 @@ exports.getReportAllDaerah = async (req, res) => {
       .map((suara) => suara.tps.kecamatan);
     const totalKecamatanWithSuara = new Set(kecamatanWithSuara).size;
 
-    const totalDesa = await TPS.distinct("desa");
+    const totalDesaWithKecamatan = await TPS.aggregate([
+      {
+        $group: {
+          _id: { desa: "$desa", kecamatan: "$kecamatan" },
+        },
+      },
+    ]);
+
     const desaWithSuara = suaraTPS
       .filter((suara) => suara.tps && suara.tps.desa)
       .map((suara) => suara.tps.desa);
     const totalDesaWithSuara = new Set(desaWithSuara).size;
 
-    const totalSaksi = await User.countDocuments();
+    const totalTPS = await TPS.countDocuments();
+    const totalTPSWithSuara = (await Suara.distinct("tps")).length;
+
+    const totalSaksi = await User.countDocuments({ role: "user" });
     const totalSaksiWithSuara = (await Suara.distinct("user")).length;
 
     res.status(200).json({
@@ -309,8 +324,10 @@ exports.getReportAllDaerah = async (req, res) => {
       totalDapilWithSuara,
       totalKecamatan: totalKecamatan.length,
       totalKecamatanWithSuara,
-      totalDesa: totalDesa.length,
+      totalDesa: totalDesaWithKecamatan.length,
       totalDesaWithSuara,
+      totalTPS,
+      totalTPSWithSuara,
       totalSaksi,
       totalSaksiWithSuara,
     });
@@ -320,5 +337,139 @@ exports.getReportAllDaerah = async (req, res) => {
       message: "Error fetching summary data",
       error: error.message,
     });
+  }
+};
+
+exports.downloadExcelTPS = async (req, res) => {
+  try {
+    const tpsData = await TPS.find().lean();
+
+    const workbook = new excel.Workbook();
+    const worksheet = workbook.addWorksheet("Data TPS");
+
+    worksheet.columns = [
+      { header: "Kode TPS", key: "kodeTPS", width: 15 },
+      { header: "Desa", key: "desa", width: 20 },
+      { header: "Kecamatan", key: "kecamatan", width: 20 },
+      { header: "Dapil", key: "dapil", width: 15 },
+      { header: "Jumlah Suara Sah", key: "jumlahSuaraSah", width: 20 },
+      {
+        header: "Jumlah Suara Tidak Sah",
+        key: "jumlahSuaraTidakSah",
+        width: 25,
+      },
+      { header: "Jumlah Total", key: "jumlahTotal", width: 15 },
+    ];
+
+    tpsData.forEach((tps) => {
+      worksheet.addRow({
+        kodeTPS: tps.kodeTPS,
+        desa: tps.desa,
+        kecamatan: tps.kecamatan,
+        dapil: tps.dapil,
+        jumlahSuaraSah: tps.jumlahSuaraSah,
+        jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
+        jumlahTotal: tps.jumlahTotal,
+      });
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=" + "TPS_Data.xlsx"
+    );
+
+    await workbook.xlsx.write(res);
+    res.status(200).end();
+  } catch (error) {
+    console.error("Error downloading Excel file:", error);
+    res
+      .status(500)
+      .json({ message: "Error downloading Excel file", error: error.message });
+  }
+};
+
+exports.downloadExcelPaslonbyTPS = async (req, res) => {
+  try {
+    const paslons = await Paslon.find({}).sort({ noUrut: 1 }).lean();
+
+    const tpsData = await TPS.find({}).lean();
+
+    const suaraData = await Suara.find({})
+      .populate({
+        path: "tps",
+        select: "kodeTPS desa kecamatan dapil",
+      })
+      .populate({
+        path: "suaraPaslon.paslon",
+        select: "noUrut",
+      })
+      .lean();
+
+    const workbook = new excel.Workbook();
+    const worksheet = workbook.addWorksheet("TPS Paslon Data");
+
+    const paslonHeaders = paslons.map((paslon) => ({
+      header: `${paslon.panggilan}`,
+      key: `paslon${paslon.noUrut}`,
+      width: 15,
+    }));
+
+    worksheet.columns = [
+      { header: "Dapil", key: "dapil", width: 15 },
+      { header: "Kecamatan", key: "kecamatan", width: 20 },
+      { header: "Desa", key: "desa", width: 20 },
+      { header: "Kode TPS", key: "kodeTPS", width: 15 },
+      ...paslonHeaders,
+      { header: "Total Suara Sah", key: "jumlahSuaraSah", width: 20 },
+      { header: "Suara Tidak Sah", key: "jumlahSuaraTidakSah", width: 20 },
+      { header: "Total Suara", key: "total", width: 15 },
+    ];
+
+    tpsData.forEach((tps) => {
+      const suaraTPS = suaraData.find((suara) => suara.tps._id.equals(tps._id));
+
+      const paslonSuara = suaraTPS
+        ? suaraTPS.suaraPaslon.reduce((acc, curr) => {
+            acc[`paslon${curr.paslon.noUrut}`] = curr.jumlahSuaraSah;
+            return acc;
+          }, {})
+        : {};
+
+      const rowData = {
+        dapil: tps.dapil,
+        kecamatan: tps.kecamatan,
+        desa: tps.desa,
+        kodeTPS: tps.kodeTPS,
+        jumlahSuaraSah: tps.jumlahSuaraSah,
+        jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
+        total: tps.jumlahTotal,
+      };
+
+      paslons.forEach((paslon) => {
+        rowData[`paslon${paslon.noUrut}`] =
+          paslonSuara[`paslon${paslon.noUrut}`] || 0;
+      });
+
+      worksheet.addRow(rowData);
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="tps-paslon.xlsx"'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error generating Excel file.");
   }
 };
