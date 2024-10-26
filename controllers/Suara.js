@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 const Suara = require("../schema/Suara.js");
-const cloudinary = require("../config/cloudinary.js");
 const upload = require("../middleware/multer.js");
 const fs = require("fs").promises;
 const { uploader } = require("cloudinary").v2;
@@ -30,7 +29,7 @@ exports.createSuara = async (req, res) => {
 
     const publicId = `${tps}`;
     const result = await uploader.upload(req.file.path, {
-      folder: "rekap_suara",
+      folder: "rekap-suara/formulir-c1",
       public_id: publicId,
     });
 

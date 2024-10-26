@@ -7,6 +7,7 @@ router.post("/register", User.registerUser);
 router.post("/login", User.loginUser);
 router.get("/user/check", User.getUserByToken);
 router.get("/user/:userId", auth, User.getUserById);
+router.patch("/attendance/:userId", auth, User.attendanceUser);
 router.patch("/user/update/:userId", auth, User.updateUser);
 
 module.exports = router;

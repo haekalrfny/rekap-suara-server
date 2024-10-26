@@ -22,6 +22,13 @@ const UserSchema = new mongoose.Schema({
     enum: ["admin", "user"],
     default: "user",
   },
+  isAttending: {
+    type: Boolean,
+    default: false,
+  },
+  attendanceImage: {
+    type: String,
+  },
 });
 
 UserSchema.pre("save", async function (next) {
