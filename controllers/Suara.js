@@ -87,7 +87,8 @@ exports.getSuaraByUser = async (req, res) => {
   try {
     const suara = await Suara.find({ user: req.params.userId })
       .populate("tps")
-      .populate("suaraPaslon.paslon");
+      .populate("suaraPaslon.paslon")
+      .populate("user");
 
     const formattedSuara = suara.map((item) => ({
       ...item._doc,
