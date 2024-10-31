@@ -58,7 +58,6 @@ exports.createSuara = async (req, res) => {
 };
 
 // Ambil Suara berdasarkan TPS
-
 exports.getSuaraByTPS = async (req, res) => {
   try {
     const suara = await Suara.find({ tps: req.params.tpsId })
@@ -171,10 +170,86 @@ exports.getSuaraByPaslon = async (req, res) => {
   }
 };
 
+exports.getSuaraByPaslonByKecamatan = async (req, res) => {
+  try {
+    const { kecamatan } = req.query; // Mengambil kecamatan dari query params
+
+    const results = await Suara.aggregate([
+      {
+        $lookup: {
+          from: "tps",
+          localField: "tps",
+          foreignField: "_id",
+          as: "tpsDetails",
+        },
+      },
+      { $unwind: "$tpsDetails" },
+      { $match: { "tpsDetails.kecamatan": kecamatan } }, // Filter berdasarkan kecamatan
+      { $unwind: "$suaraPaslon" },
+      {
+        $lookup: {
+          from: "paslon",
+          localField: "suaraPaslon.paslon",
+          foreignField: "_id",
+          as: "paslonDetails",
+        },
+      },
+      { $unwind: "$paslonDetails" },
+      {
+        $group: {
+          _id: "$suaraPaslon.paslon",
+          "Total Suara": { $sum: "$suaraPaslon.jumlahSuaraSah" },
+          "Nama Calon Ketua": { $first: "$paslonDetails.namaCalonKetua" },
+          "Nama Calon Wakil Ketua": { $first: "$paslonDetails.namaWakilKetua" },
+          Panggilan: { $first: "$paslonDetails.panggilan" },
+          "No Urut": { $first: "$paslonDetails.noUrut" },
+          "Unique Users": { $addToSet: "$user" },
+          "Last Updated": { $max: "$createdAt" },
+        },
+      },
+      {
+        $addFields: {
+          "Total Saksi": { $size: "$Unique Users" },
+        },
+      },
+      {
+        $project: {
+          "Unique Users": 0,
+        },
+      },
+      { $sort: { "No Urut": 1 } },
+    ]);
+
+    const formattedResults = results.map((result) => ({
+      _id: result._id,
+      "Total Suara": result["Total Suara"],
+      "Nama Calon Ketua": result["Nama Calon Ketua"],
+      "Nama Calon Wakil Ketua": result["Nama Calon Wakil Ketua"],
+      Panggilan: result["Panggilan"],
+      "No Urut": result["No Urut"],
+      "Total Saksi": result["Total Saksi"],
+      "Last Updated": moment(result["Last Updated"])
+        .tz("Asia/Jakarta")
+        .format("YYYY-MM-DD HH:mm:ss"),
+    }));
+
+    res.status(200).json(formattedResults);
+  } catch (error) {
+    console.error(
+      "Error fetching suara by paslon with kecamatan filter:",
+      error
+    );
+    res.status(500).json({
+      error: error.message || "Internal server error",
+      details: error,
+      to: "server",
+    });
+  }
+};
+
 exports.getSuaraBySpecificPaslon = async (req, res) => {
   try {
     const { paslonId } = req.params;
-
     if (!paslonId) {
       return res.status(400).json({
         error: "Parameter paslonId is required",
@@ -243,6 +318,109 @@ exports.getSuaraBySpecificPaslon = async (req, res) => {
     res.status(200).json(formattedResult);
   } catch (error) {
     console.error("Error fetching suara by specific paslon:", error);
+    res.status(500).json({
+      error: error.message || "Internal server error",
+      details: error,
+    });
+  }
+};
+
+exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
+  try {
+    const { paslonId } = req.params;
+    const { kecamatan } = req.query;
+
+    if (!paslonId) {
+      return res.status(400).json({
+        error: "Parameter paslonId is required",
+      });
+    }
+
+    if (!kecamatan) {
+      return res.status(400).json({
+        error: "Query parameter kecamatan is required",
+      });
+    }
+
+    const result = await Suara.aggregate([
+      { $unwind: "$suaraPaslon" },
+      {
+        $match: {
+          "suaraPaslon.paslon": new mongoose.Types.ObjectId(paslonId),
+        },
+      },
+      {
+        $lookup: {
+          from: "tps",
+          localField: "tps",
+          foreignField: "_id",
+          as: "tpsDetails",
+        },
+      },
+      { $unwind: "$tpsDetails" },
+      {
+        $match: {
+          "tpsDetails.kecamatan": kecamatan,
+        },
+      },
+      {
+        $lookup: {
+          from: "paslon",
+          localField: "suaraPaslon.paslon",
+          foreignField: "_id",
+          as: "paslonDetails",
+        },
+      },
+      { $unwind: "$paslonDetails" },
+      {
+        $group: {
+          _id: "$suaraPaslon.paslon",
+          "Total Suara": { $sum: "$suaraPaslon.jumlahSuaraSah" },
+          "Nama Calon Ketua": { $first: "$paslonDetails.namaCalonKetua" },
+          "Nama Calon Wakil Ketua": { $first: "$paslonDetails.namaWakilKetua" },
+          Panggilan: { $first: "$paslonDetails.panggilan" },
+          "No Urut": { $first: "$paslonDetails.noUrut" },
+          "Unique Users": { $addToSet: "$user" },
+          "Last Updated": { $max: "$createdAt" },
+        },
+      },
+      {
+        $addFields: {
+          "Total Saksi": { $size: "$Unique Users" },
+        },
+      },
+      {
+        $project: {
+          "Unique Users": 0,
+        },
+      },
+    ]);
+
+    if (result.length === 0) {
+      return res.status(404).json({
+        error: "Paslon not found for the specified kecamatan",
+      });
+    }
+
+    const formattedResult = {
+      _id: result[0]._id,
+      "Total Suara": result[0]["Total Suara"],
+      "Nama Calon Ketua": result[0]["Nama Calon Ketua"],
+      "Nama Calon Wakil Ketua": result[0]["Nama Calon Wakil Ketua"],
+      Panggilan: result[0]["Panggilan"],
+      "No Urut": result[0]["No Urut"],
+      "Total Saksi": result[0]["Total Saksi"],
+      "Last Updated": moment(result[0]["Last Updated"])
+        .tz("Asia/Jakarta")
+        .format("YYYY-MM-DD HH:mm:ss"),
+    };
+
+    res.status(200).json(formattedResult);
+  } catch (error) {
+    console.error(
+      "Error fetching suara by specific paslon and kecamatan:",
+      error
+    );
     res.status(500).json({
       error: error.message || "Internal server error",
       details: error,
