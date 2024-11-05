@@ -9,8 +9,9 @@ router.get("/tps/by/:tpsId", auth, TPS.getTPSById);
 router.get("/tps/page", auth, TPS.getTPSWithPagination);
 router.get("/tps/kecamatan/page", auth, TPS.getTPSKecamatanWithPagination);
 router.get("/tps/report/all", auth, TPS.getReportAllDaerah);
-router.get('/tps/report/kecamatan', auth, TPS.getReportKecamatanDaerah);
+router.get("/tps/report/kecamatan", auth, TPS.getReportKecamatanDaerah);
 router.get("/report/daerah", auth, TPS.getReportByDaerah);
+router.get("/tps/dapil", auth, TPS.getDapilWithSuara);
 router.get("/tps/downloadExcel", auth, TPS.downloadExcelTPS);
 router.get(
   "/tps/downloadExcelByKecamatan",

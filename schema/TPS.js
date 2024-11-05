@@ -7,6 +7,7 @@ const TPSSchema = new mongoose.Schema({
   dapil: { type: String, required: true },
   jumlahSuaraSah: { type: Number, required: true },
   jumlahSuaraTidakSah: { type: Number, required: true },
+  jumlahSuaraTidakTerpakai: { type: Number, required: true },
   jumlahTotal: { type: Number, required: true },
   user: { type: mongoose.Schema.Types.ObjectId, ref: "user", required: true },
 });

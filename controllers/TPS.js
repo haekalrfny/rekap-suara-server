@@ -6,7 +6,6 @@ const excel = require("exceljs");
 
 // Tambah TPS
 exports.createTPS = async (req, res) => {
-  // Validasi input
   if (!req.body) {
     return res
       .status(400)
@@ -25,7 +24,6 @@ exports.createTPS = async (req, res) => {
   }
 };
 
-// Ambil semua TPS
 exports.getAllTPS = async (req, res) => {
   try {
     const tps = await TPS.find();
@@ -38,7 +36,6 @@ exports.getAllTPS = async (req, res) => {
   }
 };
 
-// Ambil TPS berdasarkan ID
 exports.getTPSById = async (req, res) => {
   const { tpsId } = req.params;
   try {
@@ -55,11 +52,9 @@ exports.getTPSById = async (req, res) => {
   }
 };
 
-// Update TPS berdasarkan ID
 exports.updateTPS = async (req, res) => {
   const { tpsId } = req.params;
 
-  // Validasi input
   if (!req.body) {
     return res
       .status(400)
@@ -86,7 +81,6 @@ exports.updateTPS = async (req, res) => {
   }
 };
 
-// Ambil semua TPS dengan pagination
 exports.getTPSWithPagination = async (req, res) => {
   const { page = 0, limit = 7, filter = "" } = req.query;
   const pageNumber = parseInt(page, 10);
@@ -399,7 +393,6 @@ exports.getReportAllDaerah = async (req, res) => {
 
 exports.getReportKecamatanDaerah = async (req, res) => {
   const { kecamatan } = req.query;
-  console.log(kecamatan);
 
   if (!kecamatan) {
     return res.status(400).json({ message: "Kecamatan is required" });
@@ -449,6 +442,34 @@ exports.getReportKecamatanDaerah = async (req, res) => {
   }
 };
 
+exports.getDapilWithSuara = async (req, res) => {
+  try {
+    const result = await TPS.aggregate([
+      {
+        $group: {
+          _id: "$dapil",
+          totalSuara: { $sum: "$jumlahSuaraSah" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          dapil: "$_id",
+          suara: "$totalSuara",
+        },
+      },
+      {
+        $sort: { dapil: 1 },
+      },
+    ]);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching dapil data:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
 exports.downloadExcelTPS = async (req, res) => {
   const { kecamatan } = req.query;
   try {
@@ -467,6 +488,11 @@ exports.downloadExcelTPS = async (req, res) => {
         key: "jumlahSuaraTidakSah",
         width: 25,
       },
+      {
+        header: "Jumlah Suara Tidak Terpakai",
+        key: "jumlahSuaraTidakTerpakai",
+        width: 25,
+      },
       { header: "Jumlah Total", key: "jumlahTotal", width: 15 },
     ];
 
@@ -478,6 +504,7 @@ exports.downloadExcelTPS = async (req, res) => {
         dapil: tps.dapil,
         jumlahSuaraSah: tps.jumlahSuaraSah,
         jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
+        jumlahSuaraTidakTerpakai: tps.jumlahSuaraTidakTerpakai,
         jumlahTotal: tps.jumlahTotal,
       });
     });
@@ -519,6 +546,11 @@ exports.downloadExcelTPSKecamatan = async (req, res) => {
         key: "jumlahSuaraTidakSah",
         width: 25,
       },
+      {
+        header: "Jumlah Suara Tidak Terpakai",
+        key: "jumlahSuaraTidakTerpakai",
+        width: 25,
+      },
       { header: "Jumlah Total", key: "jumlahTotal", width: 15 },
     ];
 
@@ -530,6 +562,7 @@ exports.downloadExcelTPSKecamatan = async (req, res) => {
         dapil: tps.dapil,
         jumlahSuaraSah: tps.jumlahSuaraSah,
         jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
+        jumlahSuaraTidakTerpakai: tps.jumlahSuaraTidakTerpakai,
         jumlahTotal: tps.jumlahTotal,
       });
     });
@@ -556,9 +589,7 @@ exports.downloadExcelTPSKecamatan = async (req, res) => {
 exports.downloadExcelPaslonbyTPS = async (req, res) => {
   try {
     const paslons = await Paslon.find({}).sort({ noUrut: 1 }).lean();
-
     const tpsData = await TPS.find({}).lean();
-
     const suaraData = await Suara.find({})
       .populate({
         path: "tps",
@@ -587,6 +618,11 @@ exports.downloadExcelPaslonbyTPS = async (req, res) => {
       ...paslonHeaders,
       { header: "Total Suara Sah", key: "jumlahSuaraSah", width: 20 },
       { header: "Suara Tidak Sah", key: "jumlahSuaraTidakSah", width: 20 },
+      {
+        header: "Suara Tidak Terpakai",
+        key: "jumlahSuaraTidakTerpakai",
+        width: 20,
+      },
       { header: "Total Suara", key: "total", width: 15 },
     ];
 
@@ -607,6 +643,7 @@ exports.downloadExcelPaslonbyTPS = async (req, res) => {
         kodeTPS: tps.kodeTPS,
         jumlahSuaraSah: tps.jumlahSuaraSah,
         jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
+        jumlahSuaraTidakTerpakai: tps.jumlahSuaraTidakTerpakai,
         total: tps.jumlahTotal,
       };
 
@@ -668,6 +705,11 @@ exports.downloadExcelPaslonbyTPSKecamatan = async (req, res) => {
       ...paslonHeaders,
       { header: "Total Suara Sah", key: "jumlahSuaraSah", width: 20 },
       { header: "Suara Tidak Sah", key: "jumlahSuaraTidakSah", width: 20 },
+      {
+        header: "Suara Tidak Terpakai",
+        key: "jumlahSuaraTidakTerpakai",
+        width: 20,
+      },
       { header: "Total Suara", key: "total", width: 15 },
     ];
 
@@ -688,6 +730,7 @@ exports.downloadExcelPaslonbyTPSKecamatan = async (req, res) => {
         kodeTPS: tps.kodeTPS,
         jumlahSuaraSah: tps.jumlahSuaraSah,
         jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
+        jumlahSuaraTidakTerpakai: tps.jumlahSuaraTidakTerpakai,
         total: tps.jumlahTotal,
       };
 

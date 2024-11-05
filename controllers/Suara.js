@@ -172,7 +172,7 @@ exports.getSuaraByPaslon = async (req, res) => {
 
 exports.getSuaraByPaslonByKecamatan = async (req, res) => {
   try {
-    const { kecamatan } = req.query; // Mengambil kecamatan dari query params
+    const { kecamatan } = req.query;
 
     const results = await Suara.aggregate([
       {
