@@ -3,8 +3,10 @@ const cors = require("cors");
 const connectDB = require("./config/database.js");
 const app = express();
 const TPS = require("./routes/TPS.js");
-const Suara = require("./routes/Suara.js");
-const Paslon = require("./routes/Paslon.js");
+const PilgubPaslon = require("./routes/PilgubPaslon.js");
+const PilkadaPaslon = require("./routes/PilkadaPaslon.js");
+const PilgubSuara = require("./routes/PilgubSuara.js");
+const PilkadaSuara = require("./routes/PilkadaSuara.js");
 const Partai = require("./routes/Partai.js");
 const User = require("./routes/User.js");
 const dotenv = require("dotenv");
@@ -23,10 +25,12 @@ app.use(
 
 app.use(express.json());
 app.use(TPS);
-app.use(Suara);
-app.use(Paslon);
 app.use(User);
 app.use(Partai);
+app.use(PilgubPaslon);
+app.use(PilkadaPaslon);
+app.use(PilgubSuara);
+app.use(PilkadaSuara);
 
 // Buat rute contoh
 app.get("/", (req, res) => {

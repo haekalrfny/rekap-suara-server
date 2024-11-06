@@ -1,16 +1,16 @@
 const mongoose = require("mongoose");
 
-const SuaraSchema = new mongoose.Schema(
+const PilgubSuaraSchema = new mongoose.Schema(
   {
     tps: { type: mongoose.Schema.Types.ObjectId, ref: "tps", required: true },
     suaraPaslon: [
       {
         paslon: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: "paslon",
+          ref: "pilgubPaslon",
           required: true,
         },
-        jumlahSuaraSah: { type: Number, required: true },
+        suaraSah: { type: Number, required: true },
       },
     ],
     image: { type: String, required: true },
@@ -19,4 +19,8 @@ const SuaraSchema = new mongoose.Schema(
   { timestamps: { createdAt: true, updatedAt: false } }
 );
 
-module.exports = mongoose.model("suara", SuaraSchema, "suara");
+module.exports = mongoose.model(
+  "pilgubSuara",
+  PilgubSuaraSchema,
+  "pilgubSuara"
+);

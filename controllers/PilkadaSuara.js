@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
-const Suara = require("../schema/Suara.js");
+const PilkadaSuara = require("../schema/PilkadaSuara.js");
+const TPS = require("../schema/TPS.js");
 const upload = require("../middleware/multer.js");
 const fs = require("fs").promises;
 const { uploader } = require("cloudinary").v2;
@@ -29,11 +30,11 @@ exports.createSuara = async (req, res) => {
 
     const publicId = `${tps}`;
     const result = await uploader.upload(req.file.path, {
-      folder: "rekap-suara/formulir-c1",
+      folder: "hijisora/pilkada/C1 PLANO",
       public_id: publicId,
     });
 
-    const suara = new Suara({
+    const suara = new PilkadaSuara({
       tps,
       suaraPaslon: parsedSuaraPaslon,
       image: result.secure_url,
@@ -59,19 +60,20 @@ exports.createSuara = async (req, res) => {
 
 // Ambil Suara berdasarkan TPS
 exports.getSuaraByTPS = async (req, res) => {
+  const { tpsId } = req.params;
   try {
-    const suara = await Suara.find({ tps: req.params.tpsId })
-      .populate("tps")
-      .populate("suaraPaslon.paslon");
+    const suara = await PilkadaSuara.find().populate("tps").populate('suaraPaslon.paslon');
 
-    const formattedSuara = suara.map((item) => ({
-      ...item._doc,
-      createdAt: moment(item.createdAt)
+    const tpsSuara = suara.find((i) => i.tps._id.toString() === tpsId);
+
+    const results = {
+      ...tpsSuara._doc,
+      createdAt: moment(tpsSuara.createdAt)
         .tz("Asia/Jakarta")
         .format("YYYY-MM-DD HH:mm:ss"),
-    }));
+    };
 
-    res.status(200).json(formattedSuara);
+    res.status(200).json(results);
   } catch (error) {
     console.error("Error fetching suara by TPS:", error);
     res.status(500).json({
@@ -82,9 +84,10 @@ exports.getSuaraByTPS = async (req, res) => {
   }
 };
 
+// Ambil Suara berdasarkan User
 exports.getSuaraByUser = async (req, res) => {
   try {
-    const suara = await Suara.find({ user: req.params.userId })
+    const suara = await PilkadaSuara.find({ user: req.params.userId })
       .populate("tps")
       .populate("suaraPaslon.paslon")
       .populate("user");
@@ -110,11 +113,11 @@ exports.getSuaraByUser = async (req, res) => {
 // Ambil Suara berdasarkan Paslon
 exports.getSuaraByPaslon = async (req, res) => {
   try {
-    const results = await Suara.aggregate([
+    const results = await PilkadaSuara.aggregate([
       { $unwind: "$suaraPaslon" },
       {
         $lookup: {
-          from: "paslon",
+          from: "pilkadaPaslon",
           localField: "suaraPaslon.paslon",
           foreignField: "_id",
           as: "paslonDetails",
@@ -124,33 +127,25 @@ exports.getSuaraByPaslon = async (req, res) => {
       {
         $group: {
           _id: "$suaraPaslon.paslon",
-          "Total Suara": { $sum: "$suaraPaslon.jumlahSuaraSah" },
-          "Nama Calon Ketua": { $first: "$paslonDetails.namaCalonKetua" },
-          "Nama Calon Wakil Ketua": { $first: "$paslonDetails.namaWakilKetua" },
+          "Total Suara": { $sum: "$suaraPaslon.suaraSah" },
+          Ketua: { $first: "$paslonDetails.ketua" },
+          "Wakil Ketua": { $first: "$paslonDetails.wakilKetua" },
           Panggilan: { $first: "$paslonDetails.panggilan" },
           "No Urut": { $first: "$paslonDetails.noUrut" },
           "Unique Users": { $addToSet: "$user" },
           "Last Updated": { $max: "$createdAt" },
         },
       },
-      {
-        $addFields: {
-          "Total Saksi": { $size: "$Unique Users" },
-        },
-      },
-      {
-        $project: {
-          "Unique Users": 0,
-        },
-      },
+      { $addFields: { "Total Saksi": { $size: "$Unique Users" } } },
+      { $project: { "Unique Users": 0 } },
       { $sort: { "No Urut": 1 } },
     ]);
 
     const formattedResults = results.map((result) => ({
       _id: result._id,
       "Total Suara": result["Total Suara"],
-      "Nama Calon Ketua": result["Nama Calon Ketua"],
-      "Nama Calon Wakil Ketua": result["Nama Calon Wakil Ketua"],
+      Ketua: result["Ketua"],
+      "Wakil Ketua": result["Wakil Ketua"],
       Panggilan: result["Panggilan"],
       "No Urut": result["No Urut"],
       "Total Saksi": result["Total Saksi"],
@@ -158,7 +153,6 @@ exports.getSuaraByPaslon = async (req, res) => {
         .tz("Asia/Jakarta")
         .format("YYYY-MM-DD HH:mm:ss"),
     }));
-
     res.status(200).json(formattedResults);
   } catch (error) {
     console.error("Error fetching suara by paslon:", error);
@@ -170,11 +164,11 @@ exports.getSuaraByPaslon = async (req, res) => {
   }
 };
 
+// Ambil Suara berdasarkan Paslon dan Kecamatan
 exports.getSuaraByPaslonByKecamatan = async (req, res) => {
   try {
     const { kecamatan } = req.query;
-
-    const results = await Suara.aggregate([
+    const results = await PilkadaSuara.aggregate([
       {
         $lookup: {
           from: "tps",
@@ -184,11 +178,11 @@ exports.getSuaraByPaslonByKecamatan = async (req, res) => {
         },
       },
       { $unwind: "$tpsDetails" },
-      { $match: { "tpsDetails.kecamatan": kecamatan } }, // Filter berdasarkan kecamatan
+      { $match: { "tpsDetails.kecamatan": kecamatan } },
       { $unwind: "$suaraPaslon" },
       {
         $lookup: {
-          from: "paslon",
+          from: "pilkadaPaslon",
           localField: "suaraPaslon.paslon",
           foreignField: "_id",
           as: "paslonDetails",
@@ -198,33 +192,25 @@ exports.getSuaraByPaslonByKecamatan = async (req, res) => {
       {
         $group: {
           _id: "$suaraPaslon.paslon",
-          "Total Suara": { $sum: "$suaraPaslon.jumlahSuaraSah" },
-          "Nama Calon Ketua": { $first: "$paslonDetails.namaCalonKetua" },
-          "Nama Calon Wakil Ketua": { $first: "$paslonDetails.namaWakilKetua" },
+          "Total Suara": { $sum: "$suaraPaslon.suaraSah" },
+          Ketua: { $first: "$paslonDetails.ketua" },
+          "Wakil Ketua": { $first: "$paslonDetails.wakilKetua" },
           Panggilan: { $first: "$paslonDetails.panggilan" },
           "No Urut": { $first: "$paslonDetails.noUrut" },
           "Unique Users": { $addToSet: "$user" },
           "Last Updated": { $max: "$createdAt" },
         },
       },
-      {
-        $addFields: {
-          "Total Saksi": { $size: "$Unique Users" },
-        },
-      },
-      {
-        $project: {
-          "Unique Users": 0,
-        },
-      },
+      { $addFields: { "Total Saksi": { $size: "$Unique Users" } } },
+      { $project: { "Unique Users": 0 } },
       { $sort: { "No Urut": 1 } },
     ]);
 
     const formattedResults = results.map((result) => ({
       _id: result._id,
       "Total Suara": result["Total Suara"],
-      "Nama Calon Ketua": result["Nama Calon Ketua"],
-      "Nama Calon Wakil Ketua": result["Nama Calon Wakil Ketua"],
+      Ketua: result["Ketua"],
+      "Wakil Ketua": result["Wakil Ketua"],
       Panggilan: result["Panggilan"],
       "No Urut": result["No Urut"],
       "Total Saksi": result["Total Saksi"],
@@ -247,21 +233,18 @@ exports.getSuaraByPaslonByKecamatan = async (req, res) => {
   }
 };
 
+// Ambil Suara berdasarkan Specific Paslon
 exports.getSuaraBySpecificPaslon = async (req, res) => {
   try {
     const { paslonId } = req.params;
     if (!paslonId) {
-      return res.status(400).json({
-        error: "Parameter paslonId is required",
-      });
+      return res.status(400).json({ error: "Parameter paslonId is required" });
     }
 
-    const result = await Suara.aggregate([
+    const result = await PilkadaSuara.aggregate([
       { $unwind: "$suaraPaslon" },
       {
-        $match: {
-          "suaraPaslon.paslon": new mongoose.Types.ObjectId(paslonId),
-        },
+        $match: { "suaraPaslon.paslon": new mongoose.Types.ObjectId(paslonId) },
       },
       {
         $lookup: {
@@ -275,38 +258,28 @@ exports.getSuaraBySpecificPaslon = async (req, res) => {
       {
         $group: {
           _id: "$suaraPaslon.paslon",
-          "Total Suara": { $sum: "$suaraPaslon.jumlahSuaraSah" },
-          "Nama Calon Ketua": { $first: "$paslonDetails.namaCalonKetua" },
-          "Nama Calon Wakil Ketua": { $first: "$paslonDetails.namaWakilKetua" },
+          "Total Suara": { $sum: "$suaraPaslon.suaraSah" },
+          Ketua: { $first: "$paslonDetails.ketua" },
+          "Wakil Ketua": { $first: "$paslonDetails.wakilKetua" },
           Panggilan: { $first: "$paslonDetails.panggilan" },
           "No Urut": { $first: "$paslonDetails.noUrut" },
           "Unique Users": { $addToSet: "$user" },
           "Last Updated": { $max: "$createdAt" },
         },
       },
-      {
-        $addFields: {
-          "Total Saksi": { $size: "$Unique Users" },
-        },
-      },
-      {
-        $project: {
-          "Unique Users": 0,
-        },
-      },
+      { $addFields: { "Total Saksi": { $size: "$Unique Users" } } },
+      { $project: { "Unique Users": 0 } },
     ]);
 
     if (result.length === 0) {
-      return res.status(404).json({
-        error: "Paslon not found",
-      });
+      return res.status(404).json({ error: "Paslon not found" });
     }
 
     const formattedResult = {
       _id: result[0]._id,
       "Total Suara": result[0]["Total Suara"],
-      "Nama Calon Ketua": result[0]["Nama Calon Ketua"],
-      "Nama Calon Wakil Ketua": result[0]["Nama Calon Wakil Ketua"],
+      Ketua: result[0]["Ketua"],
+      "Wakil Ketua": result[0]["Wakil Ketua"],
       Panggilan: result[0]["Panggilan"],
       "No Urut": result[0]["No Urut"],
       "Total Saksi": result[0]["Total Saksi"],
@@ -325,29 +298,25 @@ exports.getSuaraBySpecificPaslon = async (req, res) => {
   }
 };
 
+// Ambil Suara berdasarkan Specific Paslon dan Kecamatan
 exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
   try {
     const { paslonId } = req.params;
     const { kecamatan } = req.query;
-
     if (!paslonId) {
-      return res.status(400).json({
-        error: "Parameter paslonId is required",
-      });
+      return res.status(400).json({ error: "Parameter paslonId is required" });
     }
 
     if (!kecamatan) {
-      return res.status(400).json({
-        error: "Query parameter kecamatan is required",
-      });
+      return res
+        .status(400)
+        .json({ error: "Query parameter kecamatan is required" });
     }
 
-    const result = await Suara.aggregate([
+    const result = await PilkadaSuara.aggregate([
       { $unwind: "$suaraPaslon" },
       {
-        $match: {
-          "suaraPaslon.paslon": new mongoose.Types.ObjectId(paslonId),
-        },
+        $match: { "suaraPaslon.paslon": new mongoose.Types.ObjectId(paslonId) },
       },
       {
         $lookup: {
@@ -358,11 +327,7 @@ exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
         },
       },
       { $unwind: "$tpsDetails" },
-      {
-        $match: {
-          "tpsDetails.kecamatan": kecamatan,
-        },
-      },
+      { $match: { "tpsDetails.kecamatan": kecamatan } },
       {
         $lookup: {
           from: "paslon",
@@ -375,9 +340,9 @@ exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
       {
         $group: {
           _id: "$suaraPaslon.paslon",
-          "Total Suara": { $sum: "$suaraPaslon.jumlahSuaraSah" },
-          "Nama Calon Ketua": { $first: "$paslonDetails.namaCalonKetua" },
-          "Nama Calon Wakil Ketua": { $first: "$paslonDetails.namaWakilKetua" },
+          "Total Suara": { $sum: "$suaraPaslon.suaraSah" },
+          Ketua: { $first: "$paslonDetails.ketua" },
+          "Wakil Ketua": { $first: "$paslonDetails.wakilKetua" },
           Panggilan: { $first: "$paslonDetails.panggilan" },
           "No Urut": { $first: "$paslonDetails.noUrut" },
           "Unique Users": { $addToSet: "$user" },
@@ -397,16 +362,16 @@ exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
     ]);
 
     if (result.length === 0) {
-      return res.status(404).json({
-        error: "Paslon not found for the specified kecamatan",
-      });
+      return res
+        .status(404)
+        .json({ error: "Paslon not found for the specified kecamatan" });
     }
 
     const formattedResult = {
       _id: result[0]._id,
       "Total Suara": result[0]["Total Suara"],
-      "Nama Calon Ketua": result[0]["Nama Calon Ketua"],
-      "Nama Calon Wakil Ketua": result[0]["Nama Calon Wakil Ketua"],
+      Ketua: result[0]["Ketua"],
+      "Wakil Ketua": result[0]["Wakil Ketua"],
       Panggilan: result[0]["Panggilan"],
       "No Urut": result[0]["No Urut"],
       "Total Saksi": result[0]["Total Saksi"],

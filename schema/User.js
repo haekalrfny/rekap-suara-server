@@ -2,33 +2,13 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 
 const UserSchema = new mongoose.Schema({
-  kodeTPS: { type: String },
-  desa: { type: String },
-  kecamatan: {
-    type: String,
-  },
-  dapil: { type: String },
-  username: {
-    type: String,
-    required: true,
-    unique: true,
-  },
-  password: {
-    type: String,
-    required: true,
-  },
-  role: {
-    type: String,
-    enum: ["admin", "user"],
-    default: "user",
-  },
-  isAttending: {
-    type: Boolean,
-    default: false,
-  },
-  attendanceImage: {
-    type: String,
-  },
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ["admin", "user"], default: "user" },
+  tps: { type: mongoose.Schema.Types.ObjectId, ref: "tps", required: true },
+  district: { type: String },
+  attandance: { type: Boolean, default: false },
+  image: { type: String },
 });
 
 UserSchema.pre("save", async function (next) {

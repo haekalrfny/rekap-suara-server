@@ -1,6 +1,8 @@
 const TPS = require("../schema/TPS.js");
-const Suara = require("../schema/Suara.js");
-const Paslon = require("../schema/Paslon.js");
+const PilkadaSuara = require("../schema/PilkadaSuara.js");
+const PilgubSuara = require("../schema/PilgubSuara.js");
+const PilkadaPaslon = require("../schema/PilkadaPaslon.js");
+const PilgubPaslon = require("../schema/PilgubPaslon.js");
 const User = require("../schema/User.js");
 const excel = require("exceljs");
 
@@ -62,7 +64,14 @@ exports.updateTPS = async (req, res) => {
   }
 
   try {
-    const updatedTPS = await TPS.findByIdAndUpdate(tpsId, req.body, {
+    const tps = await TPS.findById(tpsId);
+    if (!tps) {
+      return res.status(404).json({ message: "TPS not found" });
+    }
+
+    const updatedData = { ...req.body };
+
+    const updatedTPS = await TPS.findByIdAndUpdate(tpsId, updatedData, {
       new: true,
       runValidators: true,
     });
@@ -97,24 +106,23 @@ exports.getTPSWithPagination = async (req, res) => {
     let filterObject = {};
 
     if (filter) {
+      const numericFilter = parseInt(filter, 10);
       filterObject = {
         $or: [
           { kecamatan: { $regex: filter, $options: "i" } },
           { desa: { $regex: filter, $options: "i" } },
-          { kodeTPS: { $regex: filter, $options: "i" } },
           { dapil: { $regex: filter, $options: "i" } },
+          ...(isNaN(numericFilter) ? [] : [{ kodeTPS: numericFilter }]),
         ],
       };
     }
 
     const tps = await TPS.find(filterObject)
-      .populate("user", "username")
       .limit(limitNumber)
       .skip(pageNumber * limitNumber)
       .exec();
 
     const totalRows = await TPS.countDocuments(filterObject);
-
     res.status(200).json({
       result: tps,
       page: pageNumber,
@@ -149,23 +157,23 @@ exports.getTPSKecamatanWithPagination = async (req, res) => {
   }
 
   try {
+    const numericFilter = parseInt(filter, 10);
     const filterObject = {
       $and: [
         { kecamatan: { $regex: kecamatan, $options: "i" } },
         {
           $or: [
             { desa: { $regex: filter, $options: "i" } },
-            { kodeTPS: { $regex: filter, $options: "i" } },
+            ...(isNaN(numericFilter) ? [] : [{ kodeTPS: numericFilter }]),
           ],
         },
       ],
     };
 
     const tps = await TPS.find(filterObject)
-      .populate("user", "username")
       .limit(limitNumber)
       .skip(pageNumber * limitNumber)
-      .exec();
+      .exec()
 
     const totalRows = await TPS.countDocuments(filterObject);
 
@@ -186,17 +194,13 @@ exports.getTPSKecamatanWithPagination = async (req, res) => {
 };
 
 exports.getTPSByUsername = async (req, res) => {
-  const { username } = req.params;
-
-  if (!username) {
-    return res.status(400).json({
-      message: "Username is required",
-    });
+  const { tpsId } = req.params;
+  if (!tpsId) {
+    return res.status(400).json({ message: "TPS ID is required" });
   }
 
   try {
-    const user = await User.findOne({ username });
-
+    const user = await User.findOne({ tps: tpsId });
     if (!user) {
       return res.status(404).json({
         message: "User not found",
@@ -218,6 +222,758 @@ exports.getTPSByUsername = async (req, res) => {
   }
 };
 
+// Dapil Pilkada
+exports.getDapilWithSuaraPilkada = async (req, res) => {
+  try {
+    const result = await TPS.aggregate([
+      {
+        $group: { _id: "$dapil", totalSuara: { $sum: "$pilkada.suaraSah" } },
+      },
+      {
+        $project: {
+          _id: 0,
+          dapil: "$_id",
+          suara: "$totalSuara",
+        },
+      },
+      { $sort: { dapil: 1 } },
+    ]);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching dapil data:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+// Dapil Pilgub
+exports.getDapilWithSuaraPilgub = async (req, res) => {
+  try {
+    const result = await TPS.aggregate([
+      {
+        $group: { _id: "$dapil", totalSuara: { $sum: "$pilkada.suaraSah" } },
+      },
+      {
+        $project: {
+          _id: 0,
+          dapil: "$_id",
+          suara: "$totalSuara",
+        },
+      },
+      { $sort: { dapil: 1 } },
+    ]);
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching dapil data:", error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+exports.downloadExcelTPS = async (req, res) => {
+  const { kecamatan } = req.query;
+  try {
+    const tpsData = await TPS.find().lean();
+    const workbook = new excel.Workbook();
+    const worksheet = workbook.addWorksheet("Data TPS");
+
+    worksheet.columns = [
+      { header: "Kode TPS", key: "kodeTPS", width: 15 },
+      { header: "Desa", key: "desa", width: 20 },
+      { header: "Kecamatan", key: "kecamatan", width: 20 },
+      { header: "Dapil", key: "dapil", width: 15 },
+      { header: "Pilkada - Suara Sah", key: "pilkadaSuaraSah", width: 20 },
+      {
+        header: "Pilkada - Suara Tidak Sah",
+        key: "pilkadaSuaraTidakSah",
+        width: 25,
+      },
+      {
+        header: "Pilkada - Suara Tidak Terpakai",
+        key: "pilkadaSuaraTidakTerpakai",
+        width: 25,
+      },
+      {
+        header: "Pilkada - Kertas Suara",
+        key: "pilkadaKertasSuara",
+        width: 20,
+      },
+      { header: "Pilgub - Suara Sah", key: "pilgubSuaraSah", width: 20 },
+      {
+        header: "Pilgub - Suara Tidak Sah",
+        key: "pilgubSuaraTidakSah",
+        width: 25,
+      },
+      {
+        header: "Pilgub - Suara Tidak Terpakai",
+        key: "pilgubSuaraTidakTerpakai",
+        width: 25,
+      },
+      { header: "Pilgub - Kertas Suara", key: "pilgubKertasSuara", width: 20 },
+    ];
+
+    tpsData.forEach((tps) => {
+      worksheet.addRow({
+        kodeTPS: tps.kodeTPS,
+        desa: tps.desa,
+        kecamatan: tps.kecamatan,
+        dapil: tps.dapil,
+        pilkadaSuaraSah: tps.pilkada?.suaraSah,
+        pilkadaSuaraTidakSah: tps.pilkada?.suaraTidakSah,
+        pilkadaSuaraTidakTerpakai: tps.pilkada?.suaraTidakTerpakai,
+        pilkadaKertasSuara: tps.pilkada?.kertasSuara,
+        pilgubSuaraSah: tps.pilgub?.suaraSah,
+        pilgubSuaraTidakSah: tps.pilgub?.suaraTidakSah,
+        pilgubSuaraTidakTerpakai: tps.pilgub?.suaraTidakTerpakai,
+        pilgubKertasSuara: tps.pilgub?.kertasSuara,
+      });
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=" + "TPS_Data.xlsx"
+    );
+
+    await workbook.xlsx.write(res);
+    res.status(200).end();
+  } catch (error) {
+    console.error("Error downloading Excel file:", error);
+    res
+      .status(500)
+      .json({ message: "Error downloading Excel file", error: error.message });
+  }
+};
+
+exports.downloadExcelTPSKecamatan = async (req, res) => {
+  const { kecamatan } = req.query;
+  try {
+    const tpsData = await TPS.find({ kecamatan }).lean();
+    const workbook = new excel.Workbook();
+    const worksheet = workbook.addWorksheet("Data TPS");
+
+    worksheet.columns = [
+      { header: "Kode TPS", key: "kodeTPS", width: 15 },
+      { header: "Desa", key: "desa", width: 20 },
+      { header: "Kecamatan", key: "kecamatan", width: 20 },
+      { header: "Dapil", key: "dapil", width: 15 },
+      { header: "Pilkada - Suara Sah", key: "pilkadaSuaraSah", width: 20 },
+      {
+        header: "Pilkada - Suara Tidak Sah",
+        key: "pilkadaSuaraTidakSah",
+        width: 25,
+      },
+      {
+        header: "Pilkada - Suara Tidak Terpakai",
+        key: "pilkadaSuaraTidakTerpakai",
+        width: 25,
+      },
+      {
+        header: "Pilkada - Kertas Suara",
+        key: "pilkadaKertasSuara",
+        width: 20,
+      },
+      { header: "Pilgub - Suara Sah", key: "pilgubSuaraSah", width: 20 },
+      {
+        header: "Pilgub - Suara Tidak Sah",
+        key: "pilgubSuaraTidakSah",
+        width: 25,
+      },
+      {
+        header: "Pilgub - Suara Tidak Terpakai",
+        key: "pilgubSuaraTidakTerpakai",
+        width: 25,
+      },
+      { header: "Pilgub - Kertas Suara", key: "pilgubKertasSuara", width: 20 },
+    ];
+
+    tpsData.forEach((tps) => {
+      worksheet.addRow({
+        kodeTPS: tps.kodeTPS,
+        desa: tps.desa,
+        kecamatan: tps.kecamatan,
+        dapil: tps.dapil,
+        pilkadaSuaraSah: tps.pilkada?.suaraSah,
+        pilkadaSuaraTidakSah: tps.pilkada?.suaraTidakSah,
+        pilkadaSuaraTidakTerpakai: tps.pilkada?.suaraTidakTerpakai,
+        pilkadaKertasSuara: tps.pilkada?.kertasSuara,
+        pilgubSuaraSah: tps.pilgub?.suaraSah,
+        pilgubSuaraTidakSah: tps.pilgub?.suaraTidakSah,
+        pilgubSuaraTidakTerpakai: tps.pilgub?.suaraTidakTerpakai,
+        pilgubKertasSuara: tps.pilgub?.kertasSuara,
+      });
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=" + "TPS_Data.xlsx"
+    );
+
+    await workbook.xlsx.write(res);
+    res.status(200).end();
+  } catch (error) {
+    console.error("Error downloading Excel file:", error);
+    res
+      .status(500)
+      .json({ message: "Error downloading Excel file", error: error.message });
+  }
+};
+
+exports.downloadExcelPaslonbyTPSPilkada = async (req, res) => {
+  try {
+    const paslonData = await PilkadaPaslon.find({}).sort({ noUrut: 1 }).lean();
+    const suaraData = await PilkadaSuara.find({})
+      .populate({
+        path: "tps",
+        select: "kodeTPS desa kecamatan dapil pilkada",
+      })
+      .populate({
+        path: "suaraPaslon.paslon",
+        select: "noUrut",
+      })
+      .lean();
+    const tpsData = await TPS.find({}).lean();
+
+    const workbook = new excel.Workbook();
+    const worksheet = workbook.addWorksheet("TPS Paslon Data");
+
+    const paslonHeaders = paslonData.map((paslon) => ({
+      header: `${paslon.panggilan}`,
+      key: `paslon${paslon.noUrut}`,
+      width: 15,
+    }));
+
+    worksheet.columns = [
+      { header: "Dapil", key: "dapil", width: 15 },
+      { header: "Kecamatan", key: "kecamatan", width: 20 },
+      { header: "Desa", key: "desa", width: 20 },
+      { header: "Kode TPS", key: "kodeTPS", width: 15 },
+      ...paslonHeaders,
+      { header: "Suara Sah", key: "suaraSah", width: 20 },
+      { header: "Suara Tidak Sah", key: "suaraTidakSah", width: 20 },
+      {
+        header: "Suara Tidak Terpakai",
+        key: "suaraTidakTerpakai",
+        width: 20,
+      },
+      { header: "Kertas Suara", key: "kertasSuara", width: 15 },
+    ];
+
+    tpsData.forEach((tps) => {
+      const suaraTPS = suaraData.find((suara) => suara.tps._id.equals(tps._id));
+
+      const paslonSuara = suaraTPS
+        ? suaraTPS.suaraPaslon.reduce((acc, curr) => {
+            acc[`paslon${curr.paslon.noUrut}`] = curr.suaraSah;
+            return acc;
+          }, {})
+        : {};
+
+      const rowData = {
+        dapil: tps.dapil,
+        kecamatan: tps.kecamatan,
+        desa: tps.desa,
+        kodeTPS: tps.kodeTPS,
+        suaraSah: tps.pilkada?.suaraSah,
+        suaraTidakSah: tps.pilkada?.suaraTidakSah,
+        suaraTidakTerpakai: tps.pilkada?.suaraTidakTerpakai,
+        kertasSuara: tps.pilkada?.kertasSuara,
+      };
+
+      paslonData.forEach((paslon) => {
+        rowData[`paslon${paslon.noUrut}`] =
+          paslonSuara[`paslon${paslon.noUrut}`] || "";
+      });
+
+      worksheet.addRow(rowData);
+      console.log(tps);
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="tps-paslon.xlsx"'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error generating Excel file.");
+  }
+};
+
+exports.downloadExcelPaslonbyTPSPilgub = async (req, res) => {
+  try {
+    const paslonData = await PilgubPaslon.find({}).sort({ noUrut: 1 }).lean();
+    const suaraData = await PilgubPaslon.find({})
+      .populate({
+        path: "tps",
+        select: "kodeTPS desa kecamatan dapil pilkada",
+      })
+      .populate({
+        path: "suaraPaslon.paslon",
+        select: "noUrut",
+      })
+      .lean();
+    const tpsData = await TPS.find({}).lean();
+
+    const workbook = new excel.Workbook();
+    const worksheet = workbook.addWorksheet("TPS Paslon Data");
+
+    const paslonHeaders = paslonData.map((paslon) => ({
+      header: `${paslon.panggilan}`,
+      key: `paslon${paslon.noUrut}`,
+      width: 15,
+    }));
+
+    worksheet.columns = [
+      { header: "Dapil", key: "dapil", width: 15 },
+      { header: "Kecamatan", key: "kecamatan", width: 20 },
+      { header: "Desa", key: "desa", width: 20 },
+      { header: "Kode TPS", key: "kodeTPS", width: 15 },
+      ...paslonHeaders,
+      { header: "Suara Sah", key: "suaraSah", width: 20 },
+      { header: "Suara Tidak Sah", key: "suaraTidakSah", width: 20 },
+      {
+        header: "Suara Tidak Terpakai",
+        key: "suaraTidakTerpakai",
+        width: 20,
+      },
+      { header: "Kertas Suara", key: "kertasSuara", width: 15 },
+    ];
+
+    tpsData.forEach((tps) => {
+      const suaraTPS = suaraData.find((suara) => suara.tps._id.equals(tps._id));
+
+      const paslonSuara = suaraTPS
+        ? suaraTPS.suaraPaslon.reduce((acc, curr) => {
+            acc[`paslon${curr.paslon.noUrut}`] = curr.suaraSah;
+            return acc;
+          }, {})
+        : {};
+
+      const rowData = {
+        dapil: tps.dapil,
+        kecamatan: tps.kecamatan,
+        desa: tps.desa,
+        kodeTPS: tps.kodeTPS,
+        suaraSah: tps.pilgub?.suaraSah,
+        suaraTidakSah: tps.pilgub?.suaraTidakSah,
+        suaraTidakTerpakai: tps.pilgub?.suaraTidakTerpakai,
+        kertasSuara: tps.pilgub?.kertasSuara,
+      };
+
+      paslonData.forEach((paslon) => {
+        rowData[`paslon${paslon.noUrut}`] =
+          paslonSuara[`paslon${paslon.noUrut}`] || "";
+      });
+
+      worksheet.addRow(rowData);
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="tps-paslon.xlsx"'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error generating Excel file.");
+  }
+};
+
+exports.downloadExcelPaslonbyTPSKecamatanPilkada = async (req, res) => {
+  const { kecamatan } = req.query;
+  try {
+    const paslonData = await PilkadaPaslon.find({}).sort({ noUrut: 1 }).lean();
+    const suaraData = await PilkadaSuara.find()
+      .populate({
+        path: "tps",
+        select: "kodeTPS desa kecamatan dapil pilkada",
+      })
+      .populate({
+        path: "suaraPaslon.paslon",
+        select: "noUrut",
+      })
+      .lean();
+
+    const filteredSuara = suaraData.filter(
+      (i) => i.tps?.kecamatan === kecamatan
+    );
+
+    const tpsData = await TPS.find({ kecamatan }).lean();
+
+    const workbook = new excel.Workbook();
+    const worksheet = workbook.addWorksheet("TPS Paslon Data");
+
+    const paslonHeaders = paslonData.map((paslon) => ({
+      header: `${paslon.panggilan}`,
+      key: `paslon${paslon.noUrut}`,
+      width: 15,
+    }));
+
+    worksheet.columns = [
+      { header: "Dapil", key: "dapil", width: 15 },
+      { header: "Kecamatan", key: "kecamatan", width: 20 },
+      { header: "Desa", key: "desa", width: 20 },
+      { header: "Kode TPS", key: "kodeTPS", width: 15 },
+      ...paslonHeaders,
+      { header: "Suara Sah", key: "suaraSah", width: 20 },
+      { header: "Suara Tidak Sah", key: "suaraTidakSah", width: 20 },
+      {
+        header: "Suara Tidak Terpakai",
+        key: "suaraTidakTerpakai",
+        width: 20,
+      },
+      { header: "Kertas Suara", key: "kertasSuara", width: 15 },
+    ];
+
+    tpsData.forEach((tps) => {
+      const suaraTPS = filteredSuara.find((suara) =>
+        suara.tps._id.equals(tps._id)
+      );
+
+      const paslonSuara = suaraTPS
+        ? suaraTPS.suaraPaslon.reduce((acc, curr) => {
+            acc[`paslon${curr.paslon.noUrut}`] = curr.suaraSah;
+            return acc;
+          }, {})
+        : {};
+
+      const rowData = {
+        dapil: tps.dapil,
+        kecamatan: tps.kecamatan,
+        desa: tps.desa,
+        kodeTPS: tps.kodeTPS,
+        suaraSah: tps.pilkada?.suaraSah,
+        suaraTidakSah: tps.pilkada?.suaraTidakSah,
+        suaraTidakTerpakai: tps.pilkada?.suaraTidakTerpakai,
+        kertasSuara: tps.pilkada?.kertasSuara,
+      };
+
+      paslonData.forEach((paslon) => {
+        rowData[`paslon${paslon.noUrut}`] =
+          paslonSuara[`paslon${paslon.noUrut}`] || "";
+      });
+
+      worksheet.addRow(rowData);
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="tps-paslon.xlsx"'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error generating Excel file.");
+  }
+};
+
+exports.downloadExcelPaslonbyTPSKecamatanPilgub = async (req, res) => {
+  const { kecamatan } = req.query;
+  try {
+    const paslonData = await PilgubPaslon.find({}).sort({ noUrut: 1 }).lean();
+    const suaraData = await PilgubSuara.find()
+      .populate({
+        path: "tps",
+        select: "kodeTPS desa kecamatan dapil pilkada",
+      })
+      .populate({
+        path: "suaraPaslon.paslon",
+        select: "noUrut",
+      })
+      .lean();
+
+    const filteredSuara = suaraData.filter(
+      (i) => i.tps?.kecamatan === kecamatan
+    );
+
+    const tpsData = await TPS.find({ kecamatan }).lean();
+
+    const workbook = new excel.Workbook();
+    const worksheet = workbook.addWorksheet("TPS Paslon Data");
+
+    const paslonHeaders = paslonData.map((paslon) => ({
+      header: `${paslon.panggilan}`,
+      key: `paslon${paslon.noUrut}`,
+      width: 15,
+    }));
+
+    worksheet.columns = [
+      { header: "Dapil", key: "dapil", width: 15 },
+      { header: "Kecamatan", key: "kecamatan", width: 20 },
+      { header: "Desa", key: "desa", width: 20 },
+      { header: "Kode TPS", key: "kodeTPS", width: 15 },
+      ...paslonHeaders,
+      { header: "Suara Sah", key: "suaraSah", width: 20 },
+      { header: "Suara Tidak Sah", key: "suaraTidakSah", width: 20 },
+      {
+        header: "Suara Tidak Terpakai",
+        key: "suaraTidakTerpakai",
+        width: 20,
+      },
+      { header: "Kertas Suara", key: "kertasSuara", width: 15 },
+    ];
+
+    tpsData.forEach((tps) => {
+      const suaraTPS = filteredSuara.find((suara) =>
+        suara.tps._id.equals(tps._id)
+      );
+
+      const paslonSuara = suaraTPS
+        ? suaraTPS.suaraPaslon.reduce((acc, curr) => {
+            acc[`paslon${curr.paslon.noUrut}`] = curr.suaraSah;
+            return acc;
+          }, {})
+        : {};
+
+      const rowData = {
+        dapil: tps.dapil,
+        kecamatan: tps.kecamatan,
+        desa: tps.desa,
+        kodeTPS: tps.kodeTPS,
+        suaraSah: tps.pilgub?.suaraSah,
+        suaraTidakSah: tps.pilgub?.suaraTidakSah,
+        suaraTidakTerpakai: tps.pilgub?.suaraTidakTerpakai,
+        kertasSuara: tps.pilgub?.kertasSuara,
+      };
+
+      paslonData.forEach((paslon) => {
+        rowData[`paslon${paslon.noUrut}`] =
+          paslonSuara[`paslon${paslon.noUrut}`] || 0;
+      });
+
+      worksheet.addRow(rowData);
+    });
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="tps-paslon.xlsx"'
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Error generating Excel file.");
+  }
+};
+
+exports.getReportAllDaerah = async (req, res) => {
+  try {
+    const totalDapilWithSuaraPilkada = await TPS.aggregate([
+      { $unwind: "$pilkada" },
+      { $match: { "pilkada.suaraSah": { $gt: 0 } } },
+      { $group: { _id: "$dapil" } },
+    ]);
+
+    const totalDapilWithSuaraPilgub = await TPS.aggregate([
+      { $unwind: "$pilgub" },
+      { $match: { "pilgub.suaraSah": { $gt: 0 } } },
+      { $group: { _id: "$dapil" } },
+    ]);
+
+    const totalDapil = await TPS.distinct("dapil");
+
+    const totalKecamatanWithSuaraPilkada = await TPS.aggregate([
+      { $unwind: "$pilkada" },
+      { $match: { "pilkada.suaraSah": { $gt: 0 } } },
+      { $group: { _id: "$kecamatan" } },
+    ]);
+
+    const totalKecamatanWithSuaraPilgub = await TPS.aggregate([
+      { $unwind: "$pilgub" },
+      { $match: { "pilgub.suaraSah": { $gt: 0 } } },
+      { $group: { _id: "$kecamatan" } },
+    ]);
+
+    const totalKecamatan = await TPS.distinct("kecamatan");
+
+    const totalDesaWithSuaraPilkada = await TPS.aggregate([
+      { $unwind: "$pilkada" },
+      { $match: { "pilkada.suaraSah": { $gt: 0 } } },
+      { $group: { _id: { desa: "$desa", kecamatan: "$kecamatan" } } },
+    ]);
+
+    const totalDesaWithSuaraPilgub = await TPS.aggregate([
+      { $unwind: "$pilgub" },
+      { $match: { "pilgub.suaraSah": { $gt: 0 } } },
+      { $group: { _id: { desa: "$desa", kecamatan: "$kecamatan" } } },
+    ]);
+
+    const totalDesaWithKecamatan = await TPS.aggregate([
+      {
+        $group: {
+          _id: { desa: "$desa", kecamatan: "$kecamatan" },
+        },
+      },
+    ]);
+
+    const totalDesa = totalDesaWithKecamatan.length;
+
+    const totalTPSWithSuaraPilkada = await PilkadaSuara.countDocuments();
+    const totalTPSWithSuaraPilgub = await PilgubSuara.countDocuments();
+    const totalTPS = await TPS.countDocuments();
+
+    const totalSaksiWithSuaraPilkada = await PilkadaSuara.countDocuments();
+    const totalSaksiWithSuaraPilgub = await PilgubSuara.countDocuments();
+    const totalSaksi = await User.countDocuments({ role: "user" });
+
+    res.status(200).json({
+      dapil: {
+        total: totalDapil.length,
+        withSuara: {
+          pilkada: totalDapilWithSuaraPilkada.length,
+          pilgub: totalDapilWithSuaraPilgub.length,
+        },
+      },
+      kecamatan: {
+        total: totalKecamatan.length,
+        withSuara: {
+          pilkada: totalKecamatanWithSuaraPilkada.length,
+          pilgub: totalKecamatanWithSuaraPilgub.length,
+        },
+      },
+      desa: {
+        total: totalDesa,
+        withSuara: {
+          pilkada: totalDesaWithSuaraPilkada.length,
+          pilgub: totalDesaWithSuaraPilgub.length,
+        },
+      },
+      tps: {
+        total: totalTPS,
+        withSuara: {
+          pilkada: totalTPSWithSuaraPilkada,
+          pilgub: totalTPSWithSuaraPilgub,
+        },
+      },
+      saksi: {
+        total: totalSaksi,
+        withSuara: {
+          pilkada: totalSaksiWithSuaraPilkada,
+          pilgub: totalSaksiWithSuaraPilgub,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching summary data:", error);
+    res.status(500).json({
+      message: "Error fetching summary data",
+      error: error.message,
+    });
+  }
+};
+
+exports.getReportKecamatanDaerah = async (req, res) => {
+  const { kecamatan } = req.query;
+
+  if (!kecamatan) {
+    return res.status(400).json({ message: "Kecamatan is required" });
+  }
+
+  try {
+    const tpsList = await TPS.find({ kecamatan });
+    const totalDesa = new Set(tpsList.map((tps) => tps.desa)).size;
+
+    // Suara Pilkada untuk kecamatan ini
+    const suaraTPSPilkada = await PilkadaSuara.find({
+      tps: { $in: tpsList.map((tps) => tps._id) },
+    }).populate("tps");
+
+    // Suara Pilgub untuk kecamatan ini
+    const suaraTPSPilgub = await PilgubSuara.find({
+      tps: { $in: tpsList.map((tps) => tps._id) },
+    }).populate("tps");
+
+    // Menghitung total desa dengan suara untuk pilkada dan pilgub
+    const desaWithSuaraPilkada = suaraTPSPilkada
+      .filter((suara) => suara.tps && suara.tps.desa)
+      .map((suara) => suara.tps.desa);
+    const totalDesaWithSuaraPilkada = new Set(desaWithSuaraPilkada).size;
+
+    const desaWithSuaraPilgub = suaraTPSPilgub
+      .filter((suara) => suara.tps && suara.tps.desa)
+      .map((suara) => suara.tps.desa);
+    const totalDesaWithSuaraPilgub = new Set(desaWithSuaraPilgub).size;
+
+    // Menghitung total TPS dengan suara untuk pilkada dan pilgub
+    const totalTPS = tpsList.length;
+    const totalTPSWithSuaraPilkada = new Set(
+      suaraTPSPilkada.map((suara) => suara.tps._id.toString())
+    ).size;
+    const totalTPSWithSuaraPilgub = new Set(
+      suaraTPSPilgub.map((suara) => suara.tps._id.toString())
+    ).size;
+
+    const totalSaksiWithSuaraPilkada = new Set(
+      suaraTPSPilkada.map((suara) => suara.user.toString())
+    ).size;
+    const totalSaksiWithSuaraPilgub = new Set(
+      suaraTPSPilgub.map((suara) => suara.user.toString())
+    ).size;
+
+    res.status(200).json({
+      desa: {
+        total: totalDesa,
+        withSuara: {
+          pilkada: totalDesaWithSuaraPilkada,
+          pilgub: totalDesaWithSuaraPilgub,
+        },
+      },
+      tps: {
+        total: totalTPS,
+        withSuara: {
+          pilkada: totalTPSWithSuaraPilkada,
+          pilgub: totalTPSWithSuaraPilgub,
+        },
+      },
+      saksi: {
+        total: totalTPS,
+        withSuara: {
+          pilkada: totalSaksiWithSuaraPilkada,
+          pilgub: totalSaksiWithSuaraPilgub,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching report by kecamatan:", error);
+    res.status(500).json({
+      message: "Error fetching report by kecamatan",
+      error: error.message,
+    });
+  }
+};
+
+// need to fix
 exports.getReportByDaerah = async (req, res) => {
   const { kecamatan, desa, kodeTPS, paslonId, dapil } = req.query;
 
@@ -333,428 +1089,5 @@ exports.getReportByDaerah = async (req, res) => {
       message: "Error fetching report data",
       error: error.message,
     });
-  }
-};
-
-exports.getReportAllDaerah = async (req, res) => {
-  try {
-    const suaraTPS = await Suara.find().populate("tps");
-    const totalDapil = await TPS.distinct("dapil");
-    const dapilWithSuara = suaraTPS
-      .filter((suara) => suara.tps && suara.tps.dapil)
-      .map((suara) => suara.tps.dapil);
-    const totalDapilWithSuara = new Set(dapilWithSuara).size;
-
-    const totalKecamatan = await TPS.distinct("kecamatan");
-    const kecamatanWithSuara = suaraTPS
-      .filter((suara) => suara.tps && suara.tps.kecamatan)
-      .map((suara) => suara.tps.kecamatan);
-    const totalKecamatanWithSuara = new Set(kecamatanWithSuara).size;
-
-    const totalDesaWithKecamatan = await TPS.aggregate([
-      {
-        $group: {
-          _id: { desa: "$desa", kecamatan: "$kecamatan" },
-        },
-      },
-    ]);
-
-    const desaWithSuara = suaraTPS
-      .filter((suara) => suara.tps && suara.tps.desa)
-      .map((suara) => suara.tps.desa);
-    const totalDesaWithSuara = new Set(desaWithSuara).size;
-
-    const totalTPS = await TPS.countDocuments();
-    const totalTPSWithSuara = (await Suara.distinct("tps")).length;
-
-    const totalSaksi = await User.countDocuments({ role: "user" });
-    const totalSaksiWithSuara = (await Suara.distinct("user")).length;
-
-    res.status(200).json({
-      totalDapil: totalDapil.length,
-      totalDapilWithSuara,
-      totalKecamatan: totalKecamatan.length,
-      totalKecamatanWithSuara,
-      totalDesa: totalDesaWithKecamatan.length,
-      totalDesaWithSuara,
-      totalTPS,
-      totalTPSWithSuara,
-      totalSaksi,
-      totalSaksiWithSuara,
-    });
-  } catch (error) {
-    console.error("Error fetching summary data:", error);
-    res.status(500).json({
-      message: "Error fetching summary data",
-      error: error.message,
-    });
-  }
-};
-
-exports.getReportKecamatanDaerah = async (req, res) => {
-  const { kecamatan } = req.query;
-
-  if (!kecamatan) {
-    return res.status(400).json({ message: "Kecamatan is required" });
-  }
-
-  try {
-    const tpsList = await TPS.find({ kecamatan });
-    // Hitung total desa yang ada dalam kecamatan tersebut
-    const totalDesa = new Set(tpsList.map((tps) => tps.desa)).size;
-
-    // Ambil semua suara yang ada di kecamatan tersebut
-    const suaraTPS = await Suara.find({
-      tps: { $in: tpsList.map((tps) => tps._id) },
-    }).populate("tps");
-
-    // Hitung total desa yang memiliki suara
-    const desaWithSuara = suaraTPS
-      .filter((suara) => suara.tps && suara.tps.desa)
-      .map((suara) => suara.tps.desa);
-    const totalDesaWithSuara = new Set(desaWithSuara).size;
-
-    // Hitung total TPS dan TPS yang memiliki suara
-    const totalTPS = tpsList.length;
-    const totalTPSWithSuara = new Set(
-      suaraTPS.map((suara) => suara.tps._id.toString())
-    ).size;
-
-    // Hitung total saksi dan saksi yang memiliki suara
-    const totalSaksi = await User.countDocuments({ role: "user", kecamatan });
-    const totalSaksiWithSuara = new Set(
-      suaraTPS.map((suara) => suara.user.toString())
-    ).size;
-    res.status(200).json({
-      totalDesa,
-      totalDesaWithSuara,
-      totalTPS,
-      totalTPSWithSuara,
-      totalSaksi,
-      totalSaksiWithSuara,
-    });
-  } catch (error) {
-    console.error("Error fetching report by kecamatan:", error);
-    res.status(500).json({
-      message: "Error fetching report by kecamatan",
-      error: error.message,
-    });
-  }
-};
-
-exports.getDapilWithSuara = async (req, res) => {
-  try {
-    const result = await TPS.aggregate([
-      {
-        $group: {
-          _id: "$dapil",
-          totalSuara: { $sum: "$jumlahSuaraSah" },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          dapil: "$_id",
-          suara: "$totalSuara",
-        },
-      },
-      {
-        $sort: { dapil: 1 },
-      },
-    ]);
-
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("Error fetching dapil data:", error);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-};
-
-exports.downloadExcelTPS = async (req, res) => {
-  const { kecamatan } = req.query;
-  try {
-    const tpsData = await TPS.find().lean();
-    const workbook = new excel.Workbook();
-    const worksheet = workbook.addWorksheet("Data TPS");
-
-    worksheet.columns = [
-      { header: "Kode TPS", key: "kodeTPS", width: 15 },
-      { header: "Desa", key: "desa", width: 20 },
-      { header: "Kecamatan", key: "kecamatan", width: 20 },
-      { header: "Dapil", key: "dapil", width: 15 },
-      { header: "Jumlah Suara Sah", key: "jumlahSuaraSah", width: 20 },
-      {
-        header: "Jumlah Suara Tidak Sah",
-        key: "jumlahSuaraTidakSah",
-        width: 25,
-      },
-      {
-        header: "Jumlah Suara Tidak Terpakai",
-        key: "jumlahSuaraTidakTerpakai",
-        width: 25,
-      },
-      { header: "Jumlah Total", key: "jumlahTotal", width: 15 },
-    ];
-
-    tpsData.forEach((tps) => {
-      worksheet.addRow({
-        kodeTPS: tps.kodeTPS,
-        desa: tps.desa,
-        kecamatan: tps.kecamatan,
-        dapil: tps.dapil,
-        jumlahSuaraSah: tps.jumlahSuaraSah,
-        jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
-        jumlahSuaraTidakTerpakai: tps.jumlahSuaraTidakTerpakai,
-        jumlahTotal: tps.jumlahTotal,
-      });
-    });
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=" + "TPS_Data.xlsx"
-    );
-
-    await workbook.xlsx.write(res);
-    res.status(200).end();
-  } catch (error) {
-    console.error("Error downloading Excel file:", error);
-    res
-      .status(500)
-      .json({ message: "Error downloading Excel file", error: error.message });
-  }
-};
-
-exports.downloadExcelTPSKecamatan = async (req, res) => {
-  const { kecamatan } = req.query;
-  try {
-    const tpsData = await TPS.find({ kecamatan }).lean();
-    const workbook = new excel.Workbook();
-    const worksheet = workbook.addWorksheet("Data TPS");
-
-    worksheet.columns = [
-      { header: "Kode TPS", key: "kodeTPS", width: 15 },
-      { header: "Desa", key: "desa", width: 20 },
-      { header: "Kecamatan", key: "kecamatan", width: 20 },
-      { header: "Dapil", key: "dapil", width: 15 },
-      { header: "Jumlah Suara Sah", key: "jumlahSuaraSah", width: 20 },
-      {
-        header: "Jumlah Suara Tidak Sah",
-        key: "jumlahSuaraTidakSah",
-        width: 25,
-      },
-      {
-        header: "Jumlah Suara Tidak Terpakai",
-        key: "jumlahSuaraTidakTerpakai",
-        width: 25,
-      },
-      { header: "Jumlah Total", key: "jumlahTotal", width: 15 },
-    ];
-
-    tpsData.forEach((tps) => {
-      worksheet.addRow({
-        kodeTPS: tps.kodeTPS,
-        desa: tps.desa,
-        kecamatan: tps.kecamatan,
-        dapil: tps.dapil,
-        jumlahSuaraSah: tps.jumlahSuaraSah,
-        jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
-        jumlahSuaraTidakTerpakai: tps.jumlahSuaraTidakTerpakai,
-        jumlahTotal: tps.jumlahTotal,
-      });
-    });
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=" + "TPS_Data.xlsx"
-    );
-
-    await workbook.xlsx.write(res);
-    res.status(200).end();
-  } catch (error) {
-    console.error("Error downloading Excel file:", error);
-    res
-      .status(500)
-      .json({ message: "Error downloading Excel file", error: error.message });
-  }
-};
-
-exports.downloadExcelPaslonbyTPS = async (req, res) => {
-  try {
-    const paslons = await Paslon.find({}).sort({ noUrut: 1 }).lean();
-    const tpsData = await TPS.find({}).lean();
-    const suaraData = await Suara.find({})
-      .populate({
-        path: "tps",
-        select: "kodeTPS desa kecamatan dapil",
-      })
-      .populate({
-        path: "suaraPaslon.paslon",
-        select: "noUrut",
-      })
-      .lean();
-
-    const workbook = new excel.Workbook();
-    const worksheet = workbook.addWorksheet("TPS Paslon Data");
-
-    const paslonHeaders = paslons.map((paslon) => ({
-      header: `${paslon.panggilan}`,
-      key: `paslon${paslon.noUrut}`,
-      width: 15,
-    }));
-
-    worksheet.columns = [
-      { header: "Dapil", key: "dapil", width: 15 },
-      { header: "Kecamatan", key: "kecamatan", width: 20 },
-      { header: "Desa", key: "desa", width: 20 },
-      { header: "Kode TPS", key: "kodeTPS", width: 15 },
-      ...paslonHeaders,
-      { header: "Total Suara Sah", key: "jumlahSuaraSah", width: 20 },
-      { header: "Suara Tidak Sah", key: "jumlahSuaraTidakSah", width: 20 },
-      {
-        header: "Suara Tidak Terpakai",
-        key: "jumlahSuaraTidakTerpakai",
-        width: 20,
-      },
-      { header: "Total Suara", key: "total", width: 15 },
-    ];
-
-    tpsData.forEach((tps) => {
-      const suaraTPS = suaraData.find((suara) => suara.tps._id.equals(tps._id));
-
-      const paslonSuara = suaraTPS
-        ? suaraTPS.suaraPaslon.reduce((acc, curr) => {
-            acc[`paslon${curr.paslon.noUrut}`] = curr.jumlahSuaraSah;
-            return acc;
-          }, {})
-        : {};
-
-      const rowData = {
-        dapil: tps.dapil,
-        kecamatan: tps.kecamatan,
-        desa: tps.desa,
-        kodeTPS: tps.kodeTPS,
-        jumlahSuaraSah: tps.jumlahSuaraSah,
-        jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
-        jumlahSuaraTidakTerpakai: tps.jumlahSuaraTidakTerpakai,
-        total: tps.jumlahTotal,
-      };
-
-      paslons.forEach((paslon) => {
-        rowData[`paslon${paslon.noUrut}`] =
-          paslonSuara[`paslon${paslon.noUrut}`] || 0;
-      });
-
-      worksheet.addRow(rowData);
-    });
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="tps-paslon.xlsx"'
-    );
-
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Error generating Excel file.");
-  }
-};
-
-exports.downloadExcelPaslonbyTPSKecamatan = async (req, res) => {
-  const { kecamatan } = req.query;
-  try {
-    const paslons = await Paslon.find({}).sort({ noUrut: 1 }).lean();
-    const tpsData = await TPS.find({ kecamatan }).lean();
-    const suaraData = await Suara.find({})
-      .populate({
-        path: "tps",
-        select: "kodeTPS desa kecamatan dapil",
-      })
-      .populate({
-        path: "suaraPaslon.paslon",
-        select: "noUrut",
-      })
-      .lean();
-
-    const workbook = new excel.Workbook();
-    const worksheet = workbook.addWorksheet("TPS Paslon Data");
-
-    const paslonHeaders = paslons.map((paslon) => ({
-      header: `${paslon.panggilan}`,
-      key: `paslon${paslon.noUrut}`,
-      width: 15,
-    }));
-
-    worksheet.columns = [
-      { header: "Dapil", key: "dapil", width: 15 },
-      { header: "Kecamatan", key: "kecamatan", width: 20 },
-      { header: "Desa", key: "desa", width: 20 },
-      { header: "Kode TPS", key: "kodeTPS", width: 15 },
-      ...paslonHeaders,
-      { header: "Total Suara Sah", key: "jumlahSuaraSah", width: 20 },
-      { header: "Suara Tidak Sah", key: "jumlahSuaraTidakSah", width: 20 },
-      {
-        header: "Suara Tidak Terpakai",
-        key: "jumlahSuaraTidakTerpakai",
-        width: 20,
-      },
-      { header: "Total Suara", key: "total", width: 15 },
-    ];
-
-    tpsData.forEach((tps) => {
-      const suaraTPS = suaraData.find((suara) => suara.tps._id.equals(tps._id));
-
-      const paslonSuara = suaraTPS
-        ? suaraTPS.suaraPaslon.reduce((acc, curr) => {
-            acc[`paslon${curr.paslon.noUrut}`] = curr.jumlahSuaraSah;
-            return acc;
-          }, {})
-        : {};
-
-      const rowData = {
-        dapil: tps.dapil,
-        kecamatan: tps.kecamatan,
-        desa: tps.desa,
-        kodeTPS: tps.kodeTPS,
-        jumlahSuaraSah: tps.jumlahSuaraSah,
-        jumlahSuaraTidakSah: tps.jumlahSuaraTidakSah,
-        jumlahSuaraTidakTerpakai: tps.jumlahSuaraTidakTerpakai,
-        total: tps.jumlahTotal,
-      };
-
-      paslons.forEach((paslon) => {
-        rowData[`paslon${paslon.noUrut}`] =
-          paslonSuara[`paslon${paslon.noUrut}`] || 0;
-      });
-
-      worksheet.addRow(rowData);
-    });
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="tps-paslon.xlsx"'
-    );
-
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (error) {
-    console.error(error);
-    res.status(500).send("Error generating Excel file.");
   }
 };

@@ -115,19 +115,14 @@ exports.attendanceUser = async (req, res) => {
       });
     });
 
-    const { isAttending } = req.body;
-    if (typeof isAttending === "undefined") {
-      return res
-        .status(400)
-        .json({ message: "Please provide isAttending", number: 2 });
-    }
+    const { attandance } = req.body;
 
     let attendanceImageUrl = null;
     if (req.file) {
       const publicId = `${userId}-${Date.now()}`;
       const result = await cloudinary.uploader
         .upload(req.file.path, {
-          folder: "rekap-suara/absensi",
+          folder: "hijisora/absensi",
           public_id: publicId,
         })
         .catch((err) => {
@@ -137,15 +132,14 @@ exports.attendanceUser = async (req, res) => {
       attendanceImageUrl = result.secure_url;
       await fs.unlink(req.file.path);
     }
-
     const userRecord = await User.findById(userId);
     if (!userRecord) {
       return res.status(404).json({ message: "User not found", number: 3 });
     }
 
-    userRecord.isAttending = isAttending;
+    userRecord.attandance = attandance;
     if (attendanceImageUrl) {
-      userRecord.attendanceImage = attendanceImageUrl;
+      userRecord.image = attendanceImageUrl;
     }
     await userRecord.save();
 
@@ -169,7 +163,7 @@ exports.attendanceUser = async (req, res) => {
 
 exports.getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.userId);
+    const user = await User.findById(req.params.userId).populate("tps");
     res.status(200).json(user);
   } catch (error) {
     console.error("Error fetching user:", error);

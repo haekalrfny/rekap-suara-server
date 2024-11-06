@@ -5,27 +5,36 @@ const { auth, adminAuth } = require("../middleware/auth.js");
 
 router.post("/tps", auth, adminAuth, TPS.createTPS);
 router.get("/tps", auth, TPS.getAllTPS);
-router.get("/tps/by/:tpsId", auth, TPS.getTPSById);
+router.get("/tps/id/:tpsId", auth, TPS.getTPSById);
+router.patch("/tps/update/:tpsId", auth, TPS.updateTPS);
 router.get("/tps/page", auth, TPS.getTPSWithPagination);
 router.get("/tps/kecamatan/page", auth, TPS.getTPSKecamatanWithPagination);
-router.get("/tps/report/all", auth, TPS.getReportAllDaerah);
+router.get("/tps/username/:tpsId", auth, TPS.getTPSByUsername);
+router.get("/tps/dapil/pilkada", auth, TPS.getDapilWithSuaraPilkada);
+router.get("/tps/dapil/pilgub", auth, TPS.getDapilWithSuaraPilgub);
+router.get("/tps/excel/tps", auth, TPS.downloadExcelTPS);
+router.get("/tps/excel/kecamatan", auth, TPS.downloadExcelTPSKecamatan);
+router.get(
+  "/tps/excel/paslon/pilkada",
+  auth,
+  TPS.downloadExcelPaslonbyTPSPilkada
+);
+router.get(
+  "/tps/excel/paslon/pilgub",
+  auth,
+  TPS.downloadExcelPaslonbyTPSPilgub
+);
+router.get(
+  "/tps/excel/paslon/kecamatan/pilkada",
+  auth,
+  TPS.downloadExcelPaslonbyTPSKecamatanPilkada
+);
+router.get(
+  "/tps/excel/paslon/kecamatan/pilgub",
+  auth,
+  TPS.downloadExcelPaslonbyTPSKecamatanPilgub
+);
+router.get("/tps/report/tps", auth, TPS.getReportAllDaerah);
 router.get("/tps/report/kecamatan", auth, TPS.getReportKecamatanDaerah);
-router.get("/report/daerah", auth, TPS.getReportByDaerah);
-router.get("/tps/dapil", auth, TPS.getDapilWithSuara);
-router.get("/tps/downloadExcel", auth, TPS.downloadExcelTPS);
-router.get(
-  "/tps/downloadExcelByKecamatan",
-  auth,
-  TPS.downloadExcelTPSKecamatan
-);
-
-router.get("/tps/downloadExcelPaslonByTPS", auth, TPS.downloadExcelPaslonbyTPS);
-router.get(
-  "/tps/downloadExcelPaslonByKecamatan",
-  auth,
-  TPS.downloadExcelPaslonbyTPSKecamatan
-);
-router.get("/tps/by/username/:username", auth, TPS.getTPSByUsername);
-router.patch("/tps/update/:tpsId", auth, TPS.updateTPS);
 
 module.exports = router;
