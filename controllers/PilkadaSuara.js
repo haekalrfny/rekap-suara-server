@@ -62,7 +62,9 @@ exports.createSuara = async (req, res) => {
 exports.getSuaraByTPS = async (req, res) => {
   const { tpsId } = req.params;
   try {
-    const suara = await PilkadaSuara.find().populate("tps").populate('suaraPaslon.paslon');
+    const suara = await PilkadaSuara.find()
+      .populate("tps")
+      .populate("suaraPaslon.paslon");
 
     const tpsSuara = suara.find((i) => i.tps._id.toString() === tpsId);
 
@@ -248,7 +250,7 @@ exports.getSuaraBySpecificPaslon = async (req, res) => {
       },
       {
         $lookup: {
-          from: "paslon",
+          from: "pilkadaPaslon",
           localField: "suaraPaslon.paslon",
           foreignField: "_id",
           as: "paslonDetails",
@@ -330,7 +332,7 @@ exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
       { $match: { "tpsDetails.kecamatan": kecamatan } },
       {
         $lookup: {
-          from: "paslon",
+          from: "pilkadaPaslon",
           localField: "suaraPaslon.paslon",
           foreignField: "_id",
           as: "paslonDetails",

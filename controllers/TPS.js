@@ -251,7 +251,7 @@ exports.getDapilWithSuaraPilgub = async (req, res) => {
   try {
     const result = await TPS.aggregate([
       {
-        $group: { _id: "$dapil", totalSuara: { $sum: "$pilkada.suaraSah" } },
+        $group: { _id: "$dapil", totalSuara: { $sum: "$pilgub.suaraSah" } },
       },
       {
         $project: {

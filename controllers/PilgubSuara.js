@@ -58,18 +58,22 @@ exports.createSuara = async (req, res) => {
 
 // Ambil Suara berdasarkan TPS
 exports.getSuaraByTPS = async (req, res) => {
+  const { tpsId } = req.params;
   try {
-    const suara = await PilgubSuara.find({ tps: req.params.tpsId })
+    const suara = await PilgubSuara.find()
       .populate("tps")
       .populate("suaraPaslon.paslon");
 
-    const formattedSuara = suara.map((item) => ({
-      ...item._doc,
-      createdAt: moment(item.createdAt)
+    const tpsSuara = suara.find((i) => i.tps._id.toString() === tpsId);
+
+    const results = {
+      ...tpsSuara._doc,
+      createdAt: moment(tpsSuara.createdAt)
         .tz("Asia/Jakarta")
         .format("YYYY-MM-DD HH:mm:ss"),
-    }));
-    res.status(200).json(formattedSuara);
+    };
+
+    res.status(200).json(results);
   } catch (error) {
     console.error("Error fetching suara by TPS:", error);
     res.status(500).json({
@@ -113,7 +117,7 @@ exports.getSuaraByPaslon = async (req, res) => {
       { $unwind: "$suaraPaslon" },
       {
         $lookup: {
-          from: "paslon",
+          from: "pilgubPaslon",
           localField: "suaraPaslon.paslon",
           foreignField: "_id",
           as: "paslonDetails",
@@ -178,7 +182,7 @@ exports.getSuaraByPaslonByKecamatan = async (req, res) => {
       { $unwind: "$suaraPaslon" },
       {
         $lookup: {
-          from: "paslon",
+          from: "pilgubPaslon",
           localField: "suaraPaslon.paslon",
           foreignField: "_id",
           as: "paslonDetails",
@@ -244,7 +248,7 @@ exports.getSuaraBySpecificPaslon = async (req, res) => {
       },
       {
         $lookup: {
-          from: "paslon",
+          from: "pilgubPaslon",
           localField: "suaraPaslon.paslon",
           foreignField: "_id",
           as: "paslonDetails",
@@ -326,7 +330,7 @@ exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
       { $match: { "tpsDetails.kecamatan": kecamatan } },
       {
         $lookup: {
-          from: "paslon",
+          from: "pilgubPaslon",
           localField: "suaraPaslon.paslon",
           foreignField: "_id",
           as: "paslonDetails",
