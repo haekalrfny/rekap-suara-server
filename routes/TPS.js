@@ -8,7 +8,6 @@ router.get("/tps", auth, TPS.getAllTPS);
 router.get("/tps/id/:tpsId", auth, TPS.getTPSById);
 router.patch("/tps/update/:tpsId", auth, TPS.updateTPS);
 router.get("/tps/page", auth, TPS.getTPSWithPagination);
-router.get("/tps/kecamatan/page", auth, TPS.getTPSKecamatanWithPagination);
 router.get("/tps/username/:tpsId", auth, TPS.getTPSByUsername);
 router.get("/tps/dapil/pilkada", auth, TPS.getDapilWithSuaraPilkada);
 router.get("/tps/dapil/pilgub", auth, TPS.getDapilWithSuaraPilgub);

@@ -4,6 +4,8 @@ const { checkToken } = require("../middleware/auth.js");
 const upload = require("../middleware/multer.js");
 const fs = require("fs").promises;
 const cloudinary = require("../config/cloudinary.js");
+const mongoose = require("mongoose");
+const TPS = require("../schema/TPS.js");
 
 // Fungsi untuk menghasilkan token
 const generateToken = (user) => {
@@ -144,7 +146,7 @@ exports.attendanceUser = async (req, res) => {
     await userRecord.save();
 
     res.status(200).json({
-      message: "User attendance updated successfully",
+      message: "User attandance updated successfully",
       user: userRecord,
     });
   } catch (error) {
@@ -158,6 +160,48 @@ exports.attendanceUser = async (req, res) => {
       error: error.message,
       number: 5,
     });
+  }
+};
+
+exports.getUsersWithPagination = async (req, res) => {
+  let { page = 0, limit = 12, ...filters } = req.query;
+  page = parseInt(page, 10);
+  limit = parseInt(limit, 10);
+
+  try {
+    const query = {};
+    for (const [key, value] of Object.entries(filters)) {
+      if (value === "true") {
+        query[key] = true;
+      } else if (value === "false") {
+        query[key] = false;
+      } else if (!isNaN(value)) {
+        query[key] = parseInt(value, 10);
+      } else {
+        query[key] = { $regex: value, $options: "i" };
+      }
+    }
+
+    const users = await User.find(query)
+      .populate("tps")
+      .limit(limit)
+      .skip(page * limit)
+      .exec();
+
+    const totalRows = await User.countDocuments(query);
+
+    res.status(200).json({
+      results: users,
+      totalRows,
+      page,
+      limit,
+      totalPage: Math.ceil(totalRows / limit),
+    });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res
+      .status(500)
+      .json({ message: "Error fetching users", error: error.message });
   }
 };
 

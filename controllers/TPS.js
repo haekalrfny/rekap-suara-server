@@ -91,98 +91,44 @@ exports.updateTPS = async (req, res) => {
 };
 
 exports.getTPSWithPagination = async (req, res) => {
-  const { page = 0, limit = 7, filter = "" } = req.query;
-  const pageNumber = parseInt(page, 10);
-  const limitNumber = parseInt(limit, 10);
+  let { page = 0, limit = 12, ...filters } = req.query;
+  page = parseInt(page, 10);
+  limit = parseInt(limit, 10);
 
-  if (isNaN(pageNumber) || isNaN(limitNumber) || limitNumber < 1) {
-    return res.status(400).json({
-      message:
-        "Page must be a non-negative integer and limit must be a positive integer",
-    });
-  }
+  const query = {};
 
-  try {
-    let filterObject = {};
-
-    if (filter) {
-      const numericFilter = parseInt(filter, 10);
-      filterObject = {
-        $or: [
-          { kecamatan: { $regex: filter, $options: "i" } },
-          { desa: { $regex: filter, $options: "i" } },
-          { dapil: { $regex: filter, $options: "i" } },
-          ...(isNaN(numericFilter) ? [] : [{ kodeTPS: numericFilter }]),
-        ],
-      };
+  for (const [key, value] of Object.entries(filters)) {
+    if (key === "pilbup") {
+      if (value === "true") {
+        query["pilkada"] = { $exists: true };
+      } else if (value === "false") {
+        query["pilkada"] = { $exists: false };
+      }
+    } else if (key === "pilgub") {
+      if (value === "true") {
+        query["pilgub"] = { $exists: true };
+      } else if (value === "false") {
+        query["pilgub"] = { $exists: false };
+      }
+    } else if (isNaN(value)) {
+      query[key] = { $regex: value, $options: "i" };
+    } else {
+      query[key] = parseInt(value, 10);
     }
-
-    const tps = await TPS.find(filterObject)
-      .limit(limitNumber)
-      .skip(pageNumber * limitNumber)
-      .exec();
-
-    const totalRows = await TPS.countDocuments(filterObject);
-    res.status(200).json({
-      result: tps,
-      page: pageNumber,
-      limit: limitNumber,
-      totalRows,
-      totalPage: Math.ceil(totalRows / limitNumber),
-    });
-  } catch (error) {
-    console.error("Error fetching TPS with pagination:", error);
-    res.status(500).json({
-      message: "Error fetching TPS with pagination",
-      error: error.message,
-    });
-  }
-};
-
-exports.getTPSKecamatanWithPagination = async (req, res) => {
-  const { page = 0, limit = 7, filter = "", kecamatan = "" } = req.query;
-  const pageNumber = parseInt(page, 10);
-  const limitNumber = parseInt(limit, 10);
-
-  if (
-    isNaN(pageNumber) ||
-    pageNumber < 0 ||
-    isNaN(limitNumber) ||
-    limitNumber < 1
-  ) {
-    return res.status(400).json({
-      message:
-        "Page must be a non-negative integer and limit must be a positive integer",
-    });
   }
 
   try {
-    const numericFilter = parseInt(filter, 10);
-    const filterObject = {
-      $and: [
-        { kecamatan: { $regex: kecamatan, $options: "i" } },
-        {
-          $or: [
-            { desa: { $regex: filter, $options: "i" } },
-            ...(isNaN(numericFilter) ? [] : [{ kodeTPS: numericFilter }]),
-          ],
-        },
-      ],
-    };
-
-    const tps = await TPS.find(filterObject)
-      .limit(limitNumber)
-      .skip(pageNumber * limitNumber)
-      .exec()
-
-    const totalRows = await TPS.countDocuments(filterObject);
-
+    const tps = await TPS.find(query)
+      .limit(limit)
+      .skip(page * limit)
+      .exec();
+    const totalRows = await TPS.countDocuments(query);
     res.status(200).json({
-      result: tps,
-      page: pageNumber,
-      limit: limitNumber,
+      results: tps,
+      page,
+      limit,
       totalRows,
-      totalPage: Math.ceil(totalRows / limitNumber),
+      totalPage: Math.ceil(totalRows / limit),
     });
   } catch (error) {
     console.error("Error fetching TPS with pagination:", error);
@@ -271,9 +217,31 @@ exports.getDapilWithSuaraPilgub = async (req, res) => {
 };
 
 exports.downloadExcelTPS = async (req, res) => {
-  const { kecamatan } = req.query;
+  const { ...filters } = req.query;
+
   try {
-    const tpsData = await TPS.find().lean();
+    const query = {};
+    for (const [key, value] of Object.entries(filters)) {
+      if (key === "pilbup") {
+        if (value === "true") {
+          query["pilkada"] = { $exists: true };
+        } else if (value === "false") {
+          query["pilkada"] = { $exists: false };
+        }
+      } else if (key === "pilgub") {
+        if (value === "true") {
+          query["pilgub"] = { $exists: true };
+        } else if (value === "false") {
+          query["pilgub"] = { $exists: false };
+        }
+      } else if (isNaN(value)) {
+        query[key] = { $regex: value, $options: "i" };
+      } else {
+        query[key] = parseInt(value, 10);
+      }
+    }
+
+    const tpsData = await TPS.find(query).lean();
     const workbook = new excel.Workbook();
     const worksheet = workbook.addWorksheet("Data TPS");
 
@@ -349,9 +317,30 @@ exports.downloadExcelTPS = async (req, res) => {
 };
 
 exports.downloadExcelTPSKecamatan = async (req, res) => {
-  const { kecamatan } = req.query;
+  const { ...filters } = req.query;
   try {
-    const tpsData = await TPS.find({ kecamatan }).lean();
+    const query = {};
+    for (const [key, value] of Object.entries(filters)) {
+      if (key === "pilbup") {
+        if (value === "true") {
+          query["pilkada"] = { $exists: true };
+        } else if (value === "false") {
+          query["pilkada"] = { $exists: false };
+        }
+      } else if (key === "pilgub") {
+        if (value === "true") {
+          query["pilgub"] = { $exists: true };
+        } else if (value === "false") {
+          query["pilgub"] = { $exists: false };
+        }
+      } else if (isNaN(value)) {
+        query[key] = { $regex: value, $options: "i" };
+      } else {
+        query[key] = parseInt(value, 10);
+      }
+    }
+
+    const tpsData = await TPS.find(query).lean();
     const workbook = new excel.Workbook();
     const worksheet = workbook.addWorksheet("Data TPS");
 
