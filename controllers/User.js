@@ -71,8 +71,7 @@ exports.loginUser = async (req, res) => {
 // Update pengguna
 exports.updateUser = async (req, res) => {
   const { userId } = req.params;
-  const { kodeTPS, kecamatan, desa, dapil, username, password, role } =
-    req.body;
+  const { username, password, role } = req.body;
 
   // Validasi input
   if (!username || (password && password.length < 6)) {
@@ -83,7 +82,7 @@ exports.updateUser = async (req, res) => {
   }
 
   try {
-    const updates = { kodeTPS, kecamatan, desa, dapil, username, role };
+    const updates = { username, role };
 
     if (password) {
       updates.password = password;
@@ -169,18 +168,29 @@ exports.getUsersWithPagination = async (req, res) => {
   limit = parseInt(limit, 10);
 
   try {
+    const tpsQuery = {};
     const query = {};
+
     for (const [key, value] of Object.entries(filters)) {
-      if (value === "true") {
-        query[key] = true;
-      } else if (value === "false") {
-        query[key] = false;
-      } else if (!isNaN(value)) {
-        query[key] = parseInt(value, 10);
+      if (["dapil", "kecamatan", "desa", "kodeTPS"].includes(key)) {
+        tpsQuery[key] = isNaN(value)
+          ? { $regex: value, $options: "i" }
+          : parseInt(value, 10);
       } else {
-        query[key] = { $regex: value, $options: "i" };
+        query[key] =
+          value === "true"
+            ? true
+            : value === "false"
+            ? false
+            : isNaN(value)
+            ? { $regex: value, $options: "i" }
+            : parseInt(value, 10);
       }
     }
+
+    const tps = await TPS.find(tpsQuery).select("_id");
+    const tpsIds = tps.map((tp) => tp._id);
+    query.tps = { $in: tpsIds };
 
     const users = await User.find(query)
       .populate("tps")
