@@ -36,4 +36,9 @@ router.get(
 router.get("/tps/report/tps", auth, TPS.getReportAllDaerah);
 router.get("/tps/report/kecamatan", auth, TPS.getReportKecamatanDaerah);
 
+router.get("/tps/dapil", auth, TPS.getDapil);
+router.get("/tps/kecamatan", auth, TPS.getKecamatan);
+router.get("/tps/desa", auth, TPS.getDesa);
+router.get("/tps/kodeTPS", auth, TPS.getKodeTPS);
+
 module.exports = router;

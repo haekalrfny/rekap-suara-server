@@ -394,3 +394,75 @@ exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
     });
   }
 };
+
+exports.getSuaraPaslonDetails = async (req, res) => {
+  try {
+    const { paslonId } = req.params;
+    const { ...filters } = req.query;
+
+    const result = await PilkadaSuara.find({
+      "suaraPaslon.paslon": paslonId,
+    }).select("tps");
+
+    const tpsArray = result.map((item) => item.tps.toString());
+
+    let filterConditions = { _id: { $in: tpsArray } };
+
+    if (filters.dapil) {
+      filterConditions.dapil = filters.dapil;
+      if (filters.kecamatan) {
+        filterConditions.kecamatan = filters.kecamatan;
+        if (filters.desa) {
+          filterConditions.desa = filters.desa;
+          if (filters.kodeTPS) {
+            filterConditions.kodeTPS = filters.kodeTPS;
+          }
+        }
+      }
+    }
+
+    const filteredTPS = await TPS.find(filterConditions);
+    const tpsIds = filteredTPS.map((item) => item._id.toString());
+
+    const pilkadaSuara = await PilkadaSuara.find({
+      tps: { $in: tpsIds },
+    })
+      .populate({
+        path: "suaraPaslon.paslon",
+        match: { _id: paslonId },
+        select: "-partai",
+      })
+      .select("tps suaraPaslon");
+
+    const paslonData = pilkadaSuara.reduce((acc, item) => {
+      const paslon = item.suaraPaslon.find(
+        (suara) => suara.paslon && suara.paslon._id.toString() === paslonId
+      );
+
+      if (paslon) {
+        if (!acc) {
+          acc = {
+            _id: paslon.paslon._id,
+            ketua: paslon.paslon.ketua,
+            wakilKetua: paslon.paslon.wakilKetua,
+            noUrut: paslon.paslon.noUrut,
+            panggilan: paslon.paslon.panggilan,
+            total: paslon.suaraSah,
+            dapil: filters.dapil,
+            kecamatan: filters.kecamatan,
+            desa: filters.desa,
+            kodeTPS: filters.kodeTPS,
+          };
+        } else {
+          acc.total += paslon.suaraSah;
+        }
+      }
+      return acc;
+    }, null);
+
+    return res.status(200).json(paslonData);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
+  }
+};

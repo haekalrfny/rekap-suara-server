@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const PilgubSuara = require("../schema/PilgubSuara.js");
+const PilgubPaslon = require("../schema/PilgubPaslon.js");
 const TPS = require("../schema/TPS.js");
 const upload = require("../middleware/multer.js");
 const fs = require("fs").promises;
@@ -390,5 +391,77 @@ exports.getSuaraBySpecificPaslonByKecamatan = async (req, res) => {
       error: error.message || "Internal server error",
       details: error,
     });
+  }
+};
+
+exports.getSuaraPaslonDetails = async (req, res) => {
+  try {
+    const { paslonId } = req.params;
+    const { dapil, kecamatan, desa, kodeTPS } = req.query;
+
+    const result = await PilgubSuara.find({
+      "suaraPaslon.paslon": paslonId,
+    }).select("tps");
+
+    const tpsArray = result.map((item) => item.tps.toString());
+
+    let filterConditions = { _id: { $in: tpsArray } };
+
+    if (dapil) {
+      filterConditions.dapil = dapil;
+      if (kecamatan) {
+        filterConditions.kecamatan = kecamatan;
+        if (desa) {
+          filterConditions.desa = desa;
+          if (kodeTPS) {
+            filterConditions.kodeTPS = kodeTPS;
+          }
+        }
+      }
+    }
+
+    const filteredTPS = await TPS.find(filterConditions);
+    const tpsIds = filteredTPS.map((item) => item._id.toString());
+
+    const pilgubSuaraResult = await PilgubSuara.find({
+      tps: { $in: tpsIds },
+    })
+      .populate({
+        path: "suaraPaslon.paslon",
+        match: { _id: paslonId },
+        select: "-partai",
+      })
+      .select("tps suaraPaslon");
+
+    const paslonData = pilgubSuaraResult.reduce((acc, item) => {
+      const paslon = item.suaraPaslon.find(
+        (suara) => suara.paslon && suara.paslon._id.toString() === paslonId
+      );
+
+      if (paslon) {
+        if (!acc) {
+          acc = {
+            _id: paslon.paslon._id,
+            ketua: paslon.paslon.ketua,
+            wakilKetua: paslon.paslon.wakilKetua,
+            noUrut: paslon.paslon.noUrut,
+            panggilan: paslon.paslon.panggilan,
+            total: paslon.suaraSah,
+            dapil,
+            kecamatan,
+            desa,
+            kodeTPS,
+          };
+        } else {
+          acc.total += paslon.suaraSah;
+        }
+      }
+      return acc;
+    }, null);
+
+    return res.status(200).json(paslonData);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };

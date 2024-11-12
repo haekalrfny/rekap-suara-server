@@ -170,33 +170,47 @@ exports.getUsersWithPagination = async (req, res) => {
   try {
     const tpsQuery = {};
     const query = {};
+    let users;
 
-    for (const [key, value] of Object.entries(filters)) {
-      if (["dapil", "kecamatan", "desa", "kodeTPS"].includes(key)) {
-        tpsQuery[key] = isNaN(value)
-          ? { $regex: value, $options: "i" }
-          : parseInt(value, 10);
-      } else {
-        query[key] =
-          value === "true"
-            ? true
-            : value === "false"
-            ? false
-            : isNaN(value)
-            ? { $regex: value, $options: "i" }
-            : parseInt(value, 10);
-      }
+    // Filter role
+    if (filters.role) {
+      query.role = filters.role; // Menambahkan filter untuk role
     }
 
-    const tps = await TPS.find(tpsQuery).select("_id");
-    const tpsIds = tps.map((tp) => tp._id);
-    query.tps = { $in: tpsIds };
+    if (filters.role === "user") {
+      for (const [key, value] of Object.entries(filters)) {
+        if (["dapil", "kecamatan", "desa", "kodeTPS"].includes(key)) {
+          tpsQuery[key] = isNaN(value)
+            ? { $regex: value, $options: "i" }
+            : parseInt(value, 10);
+        } else {
+          query[key] =
+            value === "true"
+              ? true
+              : value === "false"
+              ? false
+              : isNaN(value)
+              ? { $regex: value, $options: "i" }
+              : parseInt(value, 10);
+        }
+      }
 
-    const users = await User.find(query)
-      .populate("tps")
-      .limit(limit)
-      .skip(page * limit)
-      .exec();
+      const tps = await TPS.find(tpsQuery).select("_id");
+      const tpsIds = tps.map((tp) => tp._id);
+      query.tps = { $in: tpsIds };
+
+      users = await User.find(query)
+        .populate("tps")
+        .limit(limit)
+        .skip(page * limit)
+        .exec();
+    } else {
+      // Jika filters.role bukan "user", hanya tampilkan admin
+      users = await User.find(query)
+        .limit(limit)
+        .skip(page * limit)
+        .exec();
+    }
 
     const totalRows = await User.countDocuments(query);
 

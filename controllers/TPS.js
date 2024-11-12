@@ -1080,3 +1080,50 @@ exports.getReportByDaerah = async (req, res) => {
     });
   }
 };
+
+exports.getDapil = async (req, res) => {
+  try {
+    const dapilList = await TPS.distinct("dapil");
+    res.status(200).json(dapilList);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching dapil", error: error.message });
+  }
+};
+
+exports.getKecamatan = async (req, res) => {
+  const { dapil } = req.query;
+  try {
+    const kecamatanList = await TPS.distinct("kecamatan", { dapil });
+    res.status(200).json(kecamatanList);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching kecamatan", error: error.message });
+  }
+};
+
+exports.getDesa = async (req, res) => {
+  const { dapil, kecamatan } = req.query;
+  try {
+    const desaList = await TPS.distinct("desa", { dapil, kecamatan });
+    res.status(200).json(desaList);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching desa", error: error.message });
+  }
+};
+
+exports.getKodeTPS = async (req, res) => {
+  const { dapil, kecamatan, desa } = req.query;
+  try {
+    const tpsList = await TPS.distinct("kodeTPS", { dapil, kecamatan, desa });
+    res.status(200).json(tpsList);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching desa", error: error.message });
+  }
+};

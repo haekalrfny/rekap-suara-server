@@ -22,5 +22,10 @@ router.get(
   auth,
   PilgubSuara.getSuaraBySpecificPaslonByKecamatan
 );
+router.get(
+  "/suara/pilgub/paslon/detail/:paslonId",
+  auth,
+  PilgubSuara.getSuaraPaslonDetails
+);
 
 module.exports = router;
