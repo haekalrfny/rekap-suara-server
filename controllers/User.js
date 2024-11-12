@@ -174,7 +174,7 @@ exports.getUsersWithPagination = async (req, res) => {
 
     // Filter role
     if (filters.role) {
-      query.role = filters.role; // Menambahkan filter untuk role
+      query.role = filters.role;
     }
 
     if (filters.role === "user") {
@@ -204,9 +204,25 @@ exports.getUsersWithPagination = async (req, res) => {
         .limit(limit)
         .skip(page * limit)
         .exec();
-    } else {
-      // Jika filters.role bukan "user", hanya tampilkan admin
+    } else if (filters.role === "admin") {
       users = await User.find(query)
+        .limit(limit)
+        .skip(page * limit)
+        .exec();
+    } else {
+      for (const [key, value] of Object.entries(filters)) {
+        query[key] =
+          value === "true"
+            ? true
+            : value === "false"
+            ? false
+            : isNaN(value)
+            ? { $regex: value, $options: "i" }
+            : parseInt(value, 10);
+      }
+
+      users = await User.find(query)
+        .populate("tps")
         .limit(limit)
         .skip(page * limit)
         .exec();

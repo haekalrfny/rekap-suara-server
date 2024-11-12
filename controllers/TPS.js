@@ -100,13 +100,17 @@ exports.getTPSWithPagination = async (req, res) => {
   for (const [key, value] of Object.entries(filters)) {
     if (key === "pilbup") {
       if (value === "true") {
-        query["pilkada"] = { $exists: true };
+        query["pilkada.suaraSah"] = { $exists: true };
+        query["pilkada.suaraTidakSah"] = { $exists: true };
+        query["pilkada.suaraTidakTerpakai"] = { $exists: true };
       } else if (value === "false") {
         query["pilkada"] = { $exists: false };
       }
     } else if (key === "pilgub") {
       if (value === "true") {
-        query["pilgub"] = { $exists: true };
+        query["pilgub.suaraSah"] = { $exists: true };
+        query["pilgub.suaraTidakSah"] = { $exists: true };
+        query["pilgub.suaraTidakTerpakai"] = { $exists: true };
       } else if (value === "false") {
         query["pilgub"] = { $exists: false };
       }
@@ -224,13 +228,17 @@ exports.downloadExcelTPS = async (req, res) => {
     for (const [key, value] of Object.entries(filters)) {
       if (key === "pilbup") {
         if (value === "true") {
-          query["pilkada"] = { $exists: true };
+          query["pilkada.suaraSah"] = { $exists: true };
+          query["pilkada.suaraTidakSah"] = { $exists: true };
+          query["pilkada.suaraTidakTerpakai"] = { $exists: true };
         } else if (value === "false") {
           query["pilkada"] = { $exists: false };
         }
       } else if (key === "pilgub") {
         if (value === "true") {
-          query["pilgub"] = { $exists: true };
+          query["pilgub.suaraSah"] = { $exists: true };
+          query["pilgub.suaraTidakSah"] = { $exists: true };
+          query["pilgub.suaraTidakTerpakai"] = { $exists: true };
         } else if (value === "false") {
           query["pilgub"] = { $exists: false };
         }
