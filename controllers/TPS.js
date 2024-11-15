@@ -122,13 +122,27 @@ exports.getTPSWithPagination = async (req, res) => {
   }
 
   try {
-    const tps = await TPS.find(query)
+    const tpsData = await TPS.find(query)
       .limit(limit)
       .skip(page * limit)
       .exec();
+
+    const tpsWithSuaraData = await Promise.all(
+      tpsData.map(async (tps) => {
+        const pilkadaSuara = await PilkadaSuara.findOne({ tps: tps._id });
+        const pilgubSuara = await PilgubSuara.findOne({ tps: tps._id });
+
+        return {
+          ...tps.toObject(),
+          pilkadaSuara,
+          pilgubSuara,
+        };
+      })
+    );
+
     const totalRows = await TPS.countDocuments(query);
     res.status(200).json({
-      results: tps,
+      results: tpsWithSuaraData,
       page,
       limit,
       totalRows,
@@ -424,6 +438,17 @@ exports.downloadExcelTPSKecamatan = async (req, res) => {
 };
 
 exports.downloadExcelPaslonbyTPSPilkada = async (req, res) => {
+  const { ...filters } = req.query;
+  const query = {};
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (isNaN(value)) {
+      query[key] = { $regex: value, $options: "i" };
+    } else {
+      query[key] = parseInt(value, 10);
+    }
+  }
+
   try {
     const paslonData = await PilkadaPaslon.find({}).sort({ noUrut: 1 }).lean();
     const suaraData = await PilkadaSuara.find({})
@@ -436,7 +461,7 @@ exports.downloadExcelPaslonbyTPSPilkada = async (req, res) => {
         select: "noUrut",
       })
       .lean();
-    const tpsData = await TPS.find({}).lean();
+    const tpsData = await TPS.find(query).lean();
 
     const workbook = new excel.Workbook();
     const worksheet = workbook.addWorksheet("TPS Paslon Data");
@@ -511,9 +536,20 @@ exports.downloadExcelPaslonbyTPSPilkada = async (req, res) => {
 };
 
 exports.downloadExcelPaslonbyTPSPilgub = async (req, res) => {
+  const { ...filters } = req.query;
+  const query = {};
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (isNaN(value)) {
+      query[key] = { $regex: value, $options: "i" };
+    } else {
+      query[key] = parseInt(value, 10);
+    }
+  }
+
   try {
     const paslonData = await PilgubPaslon.find({}).sort({ noUrut: 1 }).lean();
-    const suaraData = await PilgubPaslon.find({})
+    const suaraData = await PilgubSuara.find({})
       .populate({
         path: "tps",
         select: "kodeTPS desa kecamatan dapil pilkada",
@@ -523,7 +559,7 @@ exports.downloadExcelPaslonbyTPSPilgub = async (req, res) => {
         select: "noUrut",
       })
       .lean();
-    const tpsData = await TPS.find({}).lean();
+    const tpsData = await TPS.find(query).lean();
 
     const workbook = new excel.Workbook();
     const worksheet = workbook.addWorksheet("TPS Paslon Data");
@@ -577,6 +613,7 @@ exports.downloadExcelPaslonbyTPSPilgub = async (req, res) => {
       });
 
       worksheet.addRow(rowData);
+      console.log(tps);
     });
 
     res.setHeader(
@@ -597,7 +634,17 @@ exports.downloadExcelPaslonbyTPSPilgub = async (req, res) => {
 };
 
 exports.downloadExcelPaslonbyTPSKecamatanPilkada = async (req, res) => {
-  const { kecamatan } = req.query;
+  const { kecamatan, ...filters } = req.query;
+  const query = {};
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (isNaN(value)) {
+      query[key] = { $regex: value, $options: "i" };
+    } else {
+      query[key] = parseInt(value, 10);
+    }
+  }
+
   try {
     const paslonData = await PilkadaPaslon.find({}).sort({ noUrut: 1 }).lean();
     const suaraData = await PilkadaSuara.find()
@@ -615,7 +662,9 @@ exports.downloadExcelPaslonbyTPSKecamatanPilkada = async (req, res) => {
       (i) => i.tps?.kecamatan === kecamatan
     );
 
-    const tpsData = await TPS.find({ kecamatan }).lean();
+    const tpsData = await TPS.find({ kecamatan, ...query })
+      .lean()
+      .sort({ dapil: 1, kecamatan: 1, desa: 1, kodeTPS: 1 });
 
     const workbook = new excel.Workbook();
     const worksheet = workbook.addWorksheet("TPS Paslon Data");
@@ -691,7 +740,17 @@ exports.downloadExcelPaslonbyTPSKecamatanPilkada = async (req, res) => {
 };
 
 exports.downloadExcelPaslonbyTPSKecamatanPilgub = async (req, res) => {
-  const { kecamatan } = req.query;
+  const { kecamatan, ...filters } = req.query;
+  const query = {};
+
+  for (const [key, value] of Object.entries(filters)) {
+    if (isNaN(value)) {
+      query[key] = { $regex: value, $options: "i" };
+    } else {
+      query[key] = parseInt(value, 10);
+    }
+  }
+
   try {
     const paslonData = await PilgubPaslon.find({}).sort({ noUrut: 1 }).lean();
     const suaraData = await PilgubSuara.find()
@@ -709,7 +768,9 @@ exports.downloadExcelPaslonbyTPSKecamatanPilgub = async (req, res) => {
       (i) => i.tps?.kecamatan === kecamatan
     );
 
-    const tpsData = await TPS.find({ kecamatan }).lean();
+    const tpsData = await TPS.find({ kecamatan, ...query })
+      .lean()
+      .sort({ dapil: 1, kecamatan: 1, desa: 1, kodeTPS: 1 });
 
     const workbook = new excel.Workbook();
     const worksheet = workbook.addWorksheet("TPS Paslon Data");
@@ -761,7 +822,7 @@ exports.downloadExcelPaslonbyTPSKecamatanPilgub = async (req, res) => {
 
       paslonData.forEach((paslon) => {
         rowData[`paslon${paslon.noUrut}`] =
-          paslonSuara[`paslon${paslon.noUrut}`] || 0;
+          paslonSuara[`paslon${paslon.noUrut}`] || "";
       });
 
       worksheet.addRow(rowData);
@@ -1103,7 +1164,10 @@ exports.getDapil = async (req, res) => {
 exports.getKecamatan = async (req, res) => {
   const { dapil } = req.query;
   try {
-    const kecamatanList = await TPS.distinct("kecamatan", { dapil });
+    const kecamatanList = await TPS.distinct(
+      "kecamatan",
+      dapil ? { dapil } : {}
+    );
     res.status(200).json(kecamatanList);
   } catch (error) {
     res
@@ -1115,7 +1179,11 @@ exports.getKecamatan = async (req, res) => {
 exports.getDesa = async (req, res) => {
   const { dapil, kecamatan } = req.query;
   try {
-    const desaList = await TPS.distinct("desa", { dapil, kecamatan });
+    const filter = {};
+    if (dapil) filter.dapil = dapil;
+    if (kecamatan) filter.kecamatan = kecamatan;
+
+    const desaList = await TPS.distinct("desa", filter);
     res.status(200).json(desaList);
   } catch (error) {
     res
