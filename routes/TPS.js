@@ -40,5 +40,6 @@ router.get("/tps/dapil", auth, TPS.getDapil);
 router.get("/tps/kecamatan", auth, TPS.getKecamatan);
 router.get("/tps/desa", auth, TPS.getDesa);
 router.get("/tps/kodeTPS", auth, TPS.getKodeTPS);
+router.get("/tps/dapil/kecamatan", auth, TPS.getDapilByKecamatan);
 
 module.exports = router;

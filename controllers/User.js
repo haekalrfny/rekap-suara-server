@@ -257,6 +257,19 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+exports.getUserByTPS = async (req, res) => {
+  const { tpsId } = req.params;
+  try {
+    const user = await User.findOne({ tps: tpsId });
+    res.status(200).json(user);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    res
+      .status(500)
+      .json({ message: "Error fetching user", error: error.message });
+  }
+};
+
 exports.getUserByToken = async (req, res) => {
   try {
     const decoded = checkToken(req);

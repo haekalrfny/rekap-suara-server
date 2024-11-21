@@ -1203,3 +1203,26 @@ exports.getKodeTPS = async (req, res) => {
       .json({ message: "Error fetching desa", error: error.message });
   }
 };
+
+exports.getDapilByKecamatan = async (req, res) => {
+  const { kecamatan } = req.query;
+  try {
+    const dapil = await TPS.aggregate([
+      { $match: { kecamatan: kecamatan } },
+      { $group: { _id: "$dapil" } },
+      { $project: { _id: 0, dapil: "$_id" } },
+    ]);
+
+    if (dapil.length > 0) {
+      res.status(200).json(`${dapil[0].dapil}`);
+    } else {
+      res
+        .status(404)
+        .json({ message: "Dapil not found for the given kecamatan" });
+    }
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching dapil", error: error.message });
+  }
+};
