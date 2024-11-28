@@ -13,7 +13,7 @@ const PilkadaSuaraSchema = new mongoose.Schema(
         suaraSah: { type: Number, required: true },
       },
     ],
-    image: { type: String, required: true },
+    image: { type: String },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "user", required: true },
   },
   { timestamps: { createdAt: true, updatedAt: false } }

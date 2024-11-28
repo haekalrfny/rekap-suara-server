@@ -3,6 +3,12 @@ const router = express.Router();
 const TPS = require("../controllers/TPS.js");
 const { auth, adminAuth } = require("../middleware/auth.js");
 
+const fileUpload = require("express-fileupload");
+const uploadOpts = {
+  useTempFiles: true,
+  tempFileDir: `/tmp/`,
+};
+
 router.post("/tps", auth, adminAuth, TPS.createTPS);
 router.get("/tps", auth, TPS.getAllTPS);
 router.get("/tps/id/:tpsId", auth, TPS.getTPSById);
@@ -43,5 +49,17 @@ router.get("/tps/kecamatan", auth, TPS.getKecamatan);
 router.get("/tps/desa", auth, TPS.getDesa);
 router.get("/tps/kodeTPS", auth, TPS.getKodeTPS);
 router.get("/tps/dapil/kecamatan", auth, TPS.getDapilByKecamatan);
+router.post(
+  "/tps/pilkada/import-excel",
+  auth,
+  fileUpload(uploadOpts),
+  TPS.createTPSPilbupFromExcel
+);
+router.post(
+  "/tps/pilgub/import-excel",
+  auth,
+  fileUpload(uploadOpts),
+  TPS.createTPSPilgubFromExcel
+);
 
 module.exports = router;

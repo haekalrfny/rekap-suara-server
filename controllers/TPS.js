@@ -8,6 +8,8 @@ const excel = require("exceljs");
 const upload = require("../middleware/multer.js");
 const fs = require("fs").promises;
 const { uploader } = require("cloudinary").v2;
+const XLSX = require("xlsx");
+const mongoose = require("mongoose");
 
 // Tambah TPS
 exports.createTPS = async (req, res) => {
@@ -1400,5 +1402,203 @@ exports.getDapilByKecamatan = async (req, res) => {
     res
       .status(500)
       .json({ message: "Error fetching dapil", error: error.message });
+  }
+};
+
+exports.createTPSPilbupFromExcel = async (req, res) => {
+  try {
+    const { excel } = req.files;
+
+    if (
+      excel.mimetype !==
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ) {
+      fs.unlinkSync(excel.tempFilePath);
+      return res
+        .status(400)
+        .json({ message: "Invalid file format. Please upload an Excel file." });
+    }
+
+    const workbook = XLSX.readFile(excel.tempFilePath);
+    const sheetName = workbook.SheetNames[0];
+    const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    const skippedTPS = [];
+
+    const paslonIds = {
+      Dilan: new mongoose.Types.ObjectId("66fe1c058ce429c55a4468ad"),
+      Berjamaah: new mongoose.Types.ObjectId("66fe1c988ce429c55a4468af"),
+      Hade: new mongoose.Types.ObjectId("66fe1cad8ce429c55a4468b1"),
+      Edun: new mongoose.Types.ObjectId("66fe419f50a6677a17ab8985"),
+      Berdaya: new mongoose.Types.ObjectId("66ff5cdfc7fbf4d64d60f1fe"),
+    };
+
+    for (const item of data) {
+      const filter = {
+        dapil: item["Dapil"],
+        kecamatan: item["Kecamatan"],
+        desa: item["Desa"],
+        kodeTPS: item["Kode TPS"],
+      };
+
+      const updateData = {
+        pilkada: {
+          suaraSah: item["Suara Sah"] || 0,
+          suaraTidakSah: item["Suara Tidak Sah"] || 0,
+          suaraTidakTerpakai: item["Suara Tidak Terpakai"] || 0,
+          kertasSuara: item["Kertas Suara"] || 0,
+        },
+      };
+
+      const tps = await TPS.findOne(filter).populate("pilkada");
+
+      if (tps) {
+        if (tps.pilkada) {
+          const existingPilgub = tps.pilkada;
+          updateData.pilkada._id = existingPilgub._id;
+          updateData.pilkada.user = existingPilgub.user;
+        }
+
+        await TPS.updateOne(filter, { $set: updateData });
+
+        const suaraPaslon = [
+          { paslon: paslonIds.Dilan, suaraSah: item["Dilan"] || 0 },
+          { paslon: paslonIds.Berjamaah, suaraSah: item["Berjamaah"] || 0 },
+          { paslon: paslonIds.Hade, suaraSah: item["Hade"] || 0 },
+          { paslon: paslonIds.Edun, suaraSah: item["Edun"] || 0 },
+          { paslon: paslonIds.Berdaya, suaraSah: item["Berdaya"] || 0 },
+        ];
+
+        const existingSuara = await PilkadaSuara.findOne({ tps: tps._id });
+
+        if (existingSuara) {
+          await PilkadaSuara.updateOne(
+            { tps: tps._id },
+            { $set: { suaraPaslon } }
+          );
+        } else {
+          await PilkadaSuara.create({
+            tps: tps._id,
+            suaraPaslon,
+            user: req.user.id,
+          });
+        }
+      } else {
+        skippedTPS.push(filter);
+      }
+    }
+
+    await fs.unlink(excel.tempFilePath);
+    res.status(200).json({
+      message: "Data TPS and Suara successfully updated.",
+      skippedTPS,
+      skippedCount: skippedTPS.length,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error updating TPS and Suara from Excel",
+      error: error.message,
+    });
+  }
+};
+
+exports.createTPSPilgubFromExcel = async (req, res) => {
+  try {
+    const { excel } = req.files;
+
+    if (
+      excel.mimetype !==
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ) {
+      fs.unlinkSync(excel.tempFilePath);
+      return res
+        .status(400)
+        .json({ message: "Invalid file format. Please upload an Excel file." });
+    }
+
+    const workbook = XLSX.readFile(excel.tempFilePath);
+    const sheetName = workbook.SheetNames[0];
+    const data = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    const skippedTPS = [];
+
+    const paslonIds = {
+      "Acep-Gita": new mongoose.Types.ObjectId("672b5780a040ba94fdb7f915"),
+      "Jeje-Ronal": new mongoose.Types.ObjectId("672b5780a040ba94fdb7f916"),
+      Asih: new mongoose.Types.ObjectId("672b5780a040ba94fdb7f914"),
+      "Dedi-Erwan": new mongoose.Types.ObjectId("672b5780a040ba94fdb7f913"),
+    };
+
+    for (const item of data) {
+      const filter = {
+        dapil: item["Dapil"],
+        kecamatan: item["Kecamatan"],
+        desa: item["Desa"],
+        kodeTPS: item["Kode TPS"],
+      };
+
+      const updateData = {
+        pilgub: {
+          suaraSah: item["Suara Sah"] || 0,
+          suaraTidakSah: item["Suara Tidak Sah"] || 0,
+          suaraTidakTerpakai: item["Suara Tidak Terpakai"] || 0,
+          kertasSuara: item["Kertas Suara"] || 0,
+        },
+      };
+
+      const tps = await TPS.findOne(filter).populate("pilgub");
+
+      if (tps) {
+        if (tps.pilgub) {
+          const existingPilgub = tps.pilgub;
+          updateData.pilgub._id = existingPilgub._id;
+          updateData.pilgub.user = existingPilgub.user;
+        }
+
+        await TPS.updateOne(filter, { $set: updateData });
+
+        const suaraPaslon = [
+          { paslon: paslonIds["Acep-Gita"], suaraSah: item["Acep-Gita"] || 0 },
+          {
+            paslon: paslonIds["Jeje-Ronal"],
+            suaraSah: item["Jeje-Ronal"] || 0,
+          },
+          { paslon: paslonIds.Asih, suaraSah: item["Asih"] || 0 },
+          {
+            paslon: paslonIds["Dedi-Erwan"],
+            suaraSah: item["Dedi-Erwan"] || 0,
+          },
+        ];
+
+        const existingSuara = await PilgubSuara.findOne({ tps: tps._id });
+
+        if (existingSuara) {
+          await PilgubSuara.updateOne(
+            { tps: tps._id },
+            { $set: { suaraPaslon } }
+          );
+        } else {
+          await PilgubSuara.create({
+            tps: tps._id,
+            suaraPaslon,
+            user: req.user.id,
+          });
+        }
+      } else {
+        skippedTPS.push(filter);
+      }
+    }
+
+    await fs.unlink(excel.tempFilePath);
+    res.status(200).json({
+      message: "Data TPS and Suara successfully updated.",
+      skippedTPS,
+      skippedCount: skippedTPS.length,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Error updating TPS and Suara from Excel",
+      error: error.message,
+    });
   }
 };
