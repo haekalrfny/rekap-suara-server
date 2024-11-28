@@ -5,6 +5,9 @@ const PilkadaPaslon = require("../schema/PilkadaPaslon.js");
 const PilgubPaslon = require("../schema/PilgubPaslon.js");
 const User = require("../schema/User.js");
 const excel = require("exceljs");
+const upload = require("../middleware/multer.js");
+const fs = require("fs").promises;
+const { uploader } = require("cloudinary").v2;
 
 // Tambah TPS
 exports.createTPS = async (req, res) => {
@@ -40,17 +43,29 @@ exports.getAllTPS = async (req, res) => {
 
 exports.getTPSById = async (req, res) => {
   const { tpsId } = req.params;
+
   try {
     const tps = await TPS.findById(tpsId);
     if (!tps) {
       return res.status(404).json({ message: "TPS not found" });
     }
-    res.status(200).json(tps);
+
+    const pilkadaSuara = await PilkadaSuara.findOne({ tps: tps._id });
+    const pilgubSuara = await PilgubSuara.findOne({ tps: tps._id });
+
+    const tpsWithSuaraData = {
+      ...tps.toObject(),
+      pilkadaSuara,
+      pilgubSuara,
+    };
+
+    res.status(200).json(tpsWithSuaraData);
   } catch (error) {
-    console.error("Error fetching TPS:", error);
-    res
-      .status(500)
-      .json({ message: "Error fetching TPS", error: error.message });
+    console.error("Error fetching TPS by ID:", error);
+    res.status(500).json({
+      message: "Error fetching TPS by ID",
+      error: error.message,
+    });
   }
 };
 
@@ -86,6 +101,167 @@ exports.updateTPS = async (req, res) => {
     res.status(500).json({
       message: "Error updating TPS",
       error: error.message,
+    });
+  }
+};
+
+exports.updateTPSAndPilgub = async (req, res) => {
+  const { tpsId } = req.params;
+  const {
+    pilgubPaslon,
+    kertasSuara,
+    suaraSah,
+    suaraTidakSah,
+    suaraTidakTerpakai,
+  } = req.body;
+
+  try {
+    let imageUrl = null;
+
+    if (req.file) {
+      await new Promise((resolve, reject) => {
+        upload.single("image")(req, res, (err) => {
+          if (err) reject({ status: 500, message: err, to: "multer" });
+          resolve();
+        });
+      });
+
+      const publicId = `pilgub_${tpsId}`;
+      const uploadResult = await uploader.upload(req.file.path, {
+        folder: "hijisora/pilgub/UPDATE",
+        public_id: publicId,
+      });
+      imageUrl = uploadResult.secure_url;
+
+      // Hapus file lokal setelah upload
+      await fs.unlink(req.file.path);
+    }
+
+    const tps = await TPS.findById(tpsId);
+    if (!tps) {
+      return res.status(404).json({ message: "TPS not found" });
+    }
+
+    // Update TPS data
+    const updateTPS = await TPS.updateOne(
+      { _id: tpsId },
+      {
+        $set: {
+          "pilgub.kertasSuara": kertasSuara,
+          "pilgub.suaraSah": suaraSah,
+          "pilgub.suaraTidakSah": suaraTidakSah,
+          "pilgub.suaraTidakTerpakai": suaraTidakTerpakai,
+        },
+      }
+    );
+
+    // Update PilgubSuara data
+    const updatePilgubSuara = await PilgubSuara.updateOne(
+      { tps: tpsId },
+      {
+        $set: {
+          suaraPaslon: pilgubPaslon,
+          ...(imageUrl && { image: imageUrl }), // Hanya update image jika ada
+        },
+      }
+    );
+
+    res.status(200).json({
+      message: "Update successful",
+      updateTPS,
+      updatePilgubSuara,
+    });
+  } catch (error) {
+    console.error("Error updating TPS:", error);
+    if (error.status) {
+      return res
+        .status(error.status)
+        .json({ message: error.message, to: error.to });
+    }
+    res.status(500).json({
+      message: error.message || "Error updating TPS",
+      to: "server",
+    });
+  }
+};
+
+exports.updateTPSAndPilbup = async (req, res) => {
+  const { tpsId } = req.params;
+  const {
+    pilkadaPaslon,
+    kertasSuara,
+    suaraSah,
+    suaraTidakSah,
+    suaraTidakTerpakai,
+  } = req.body;
+
+  try {
+    let imageUrl = null;
+
+    if (req.file) {
+      await new Promise((resolve, reject) => {
+        upload.single("image")(req, res, (err) => {
+          if (err) reject({ status: 500, message: err, to: "multer" });
+          resolve();
+        });
+      });
+
+      const publicId = `pilbup_${tpsId}`;
+      const uploadResult = await uploader.upload(req.file.path, {
+        folder: "hijisora/pilbup/UPDATE",
+        public_id: publicId,
+      });
+      imageUrl = uploadResult.secure_url;
+      await fs.unlink(req.file.path);
+    }
+
+    const tps = await TPS.findById(tpsId);
+    if (!tps) {
+      return res.status(404).json({ message: "TPS not found" });
+    }
+
+    // Update TPS data
+    const updateTPS = await TPS.updateOne(
+      { _id: tpsId },
+      {
+        $set: {
+          "pilkada.kertasSuara": kertasSuara,
+          "pilkada.suaraSah": suaraSah,
+          "pilkada.suaraTidakSah": suaraTidakSah,
+          "pilkada.suaraTidakTerpakai": suaraTidakTerpakai,
+        },
+      }
+    );
+
+    // Update PilgubSuara data
+    const updatePilbupSuara = await PilkadaSuara.updateOne(
+      { tps: tpsId },
+      {
+        $set: {
+          suaraPaslon: pilkadaPaslon,
+          ...(imageUrl && { image: imageUrl }),
+        },
+      }
+    );
+
+    console.log(imageUrl);
+    res.status(200).json({
+      message: "Update successful",
+      updateTPS,
+      updatePilbupSuara,
+    });
+
+    console.log(pilkadaPaslon, suaraSah, suaraTidakSah, suaraTidakTerpakai);
+  } catch (error) {
+    console.error("Error updating TPS:", error);
+    if (error.status) {
+      return res
+        .status(error.status)
+        .json({ message: error.message, to: error.to });
+    }
+    res.status(500).json({
+      message: error.message || "Error updating TPS",
+      to: "server",
     });
   }
 };

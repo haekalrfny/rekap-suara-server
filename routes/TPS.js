@@ -7,6 +7,8 @@ router.post("/tps", auth, adminAuth, TPS.createTPS);
 router.get("/tps", auth, TPS.getAllTPS);
 router.get("/tps/id/:tpsId", auth, TPS.getTPSById);
 router.patch("/tps/update/:tpsId", auth, TPS.updateTPS);
+router.patch("/tps/update/pilgub/:tpsId", auth, TPS.updateTPSAndPilgub);
+router.patch("/tps/update/pilkada/:tpsId", auth, TPS.updateTPSAndPilbup);
 router.get("/tps/page", auth, TPS.getTPSWithPagination);
 router.get("/tps/username/:tpsId", auth, TPS.getTPSByUsername);
 router.get("/tps/dapil/pilkada", auth, TPS.getDapilWithSuaraPilkada);
